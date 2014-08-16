@@ -233,7 +233,6 @@ let load_object filename content =
   match magic with
   | 0x0000107l
   | 0x0020107l ->
-      Log.message "loading object file %s" filename;
       let text_size = Int32.to_int (read_long content 4) in
       let data_size = Int32.to_int (read_long content 8) in
       let bss_size = Int32.to_int (read_long content 12) in
@@ -274,7 +273,6 @@ let load_archive filename content =
   let global_header = read_substring content 0 8 in
   match global_header with
   | "!<arch>\n" ->
-      Log.message "loading archive %s" filename;
       let read_file offset =
         let file_name = read_substring content offset 16 in
         let timestamp = read_substring content (offset + 16) 12 in
