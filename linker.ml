@@ -37,32 +37,23 @@ let set_text_segment_type x =
   | Absolute _ -> text_segment_type := Some x
   | Contiguous -> error "Error in text-segment address: cannot be contiguous"
 
-let split sep s =
-  let n = String.length s in
-  let rec aux start i =
-    if i < n then
-      if s.[i] = sep then String.sub s start (i - start) :: aux (i+1) (i+1)
-      else aux start (i+1)
-    else [String.sub s start (i - start)]
-  in
-  aux 0 0
-
 let do_file filename =
+  let path = List.rev !lib_directories in
   try
-    let real_filename = FileExt.find ~path:!lib_directories ~ext:[".o"; ".a"] filename in
+    let real_filename = FileExt.find ~path ~ext:[".o"; ".a"] filename in
     log "File %s found: %s" filename real_filename
   with Not_found ->
-    error "Cannot find file %s [search path = %s]" filename (String.concat ", " !lib_directories)
+    error "Cannot find file %s [search path = %s]" filename (String.concat ", " path)
 
 let init_lib_directories () =
   begin try
     let s = Sys.getenv "ALNPATH" in
-    lib_directories := split ':' s
+    lib_directories := StringExt.rev_split ':' s
   with Not_found -> ()
   end;
   begin try
     let s = Sys.getenv "RLNPATH" in
-    lib_directories := !lib_directories @ split ':' s
+    lib_directories := StringExt.rev_split ':' s @ !lib_directories
   with Not_found -> ()
   end
 
@@ -93,7 +84,7 @@ let main () =
 
      "-v", Set verbose_mode, "set verbose mode";
      "-w", Set warning_enabled, "show linker warnings";
-     "-y", String (fun s -> lib_directories := !lib_directories @ split ':' s), "<dir1:dir2:...> add directories to search path";
+     "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
     ] do_file info_string
 
 let _ = main ()

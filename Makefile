@@ -9,8 +9,8 @@ OCAMLFLAGS = -unsafe -annot
 
 VERSION=0.0.1
 
-SRCMLI=fileExt.mli
-SRCML=version.ml fileExt.ml linker.ml
+SRCMLI=fileExt.mli stringExt.mli
+SRCML=version.ml fileExt.ml stringExt.ml linker.ml
 
 SRCS=$(SRCML) $(SRCMLI)
 
