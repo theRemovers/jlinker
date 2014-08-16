@@ -118,7 +118,7 @@ type section =
 
 type symbol_type =
   | Local of section
-  | External of section option
+  | Global of section option
 
 type obj_params =
     { filename: string;
@@ -175,15 +175,15 @@ let read_string s offset =
   end else raise (Invalid_argument "read_string")
 
 let symbol_type = function
-  | 0x01000000l -> External None
+  | 0x01000000l -> Global None
   | 0x02000000l -> Local Abs
-  | 0x03000000l -> External (Some Abs)
+  | 0x03000000l -> Global (Some Abs)
   | 0x04000000l -> Local Text
   | 0x06000000l -> Local Data
   | 0x08000000l -> Local Bss
-  | 0x05000000l -> External (Some Text)
-  | 0x07000000l -> External (Some Data)
-  | 0x09000000l -> External (Some Bss)
+  | 0x05000000l -> Global (Some Text)
+  | 0x07000000l -> Global (Some Data)
+  | 0x09000000l -> Global (Some Bss)
   | sym_type -> Log.error "Unknown symbol type 0x%08lx" sym_type
 
 let string_of_section = function
@@ -194,8 +194,8 @@ let string_of_section = function
 
 let string_of_symbol_type = function
   | Local sec -> Format.sprintf "Local(%s)" (string_of_section sec)
-  | External None -> "External(unknown)"
-  | External (Some sec) -> Format.sprintf "External(%s)" (string_of_section sec)
+  | Global None -> "Global(unknown)"
+  | Global (Some sec) -> Format.sprintf "Global(%s)" (string_of_section sec)
 
 let mk_object filename content =
   Log.message "loading object file %s" filename;
