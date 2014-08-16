@@ -4,7 +4,7 @@ OCAMLC=ocamlc
 INCL=$(shell $(OCAMLC) -where)/site-lib/camlimages
 
 #OCAMLNLDFLAGS = -ccopt -static
-OCAMLFLAGS = -unsafe
+OCAMLFLAGS = -unsafe -annot
 
 VERSION=0.0.1
 
