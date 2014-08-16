@@ -119,8 +119,9 @@ type section =
 type symbol_type =
   | Local of section
   | Global of section option
+  | Unknown of Int32.t
 
-type obj_params =
+type object_params =
     { filename: string;
       text_size: int;
       data_size: int;
@@ -131,12 +132,34 @@ type obj_params =
       symbols: (string, symbol_type * Int32.t) Hashtbl.t;
       content: string; }
 
-type obj_kind =
-  | Obj of obj_params
+type 'a archived_file =
+    { filename: string;
+      timestamp: string;
+      owner_id: string;
+      group_id: string;
+      file_mode: string;
+      content: string;
+      data: 'a option;
+     }
 
-let display_obj = function
-  | Obj {filename; text_size; data_size; bss_size; sym_size; text_reloc_size; data_reloc_size; content = _} ->
-      Log.message "OBJ - %s, Text %d, Data = %d, BSS = %d, Symbols = %d, Text reloc = %d, Data reloc = %d" filename text_size data_size bss_size sym_size text_reloc_size data_reloc_size
+type 'a archive =
+    { filename: string;
+      content: 'a archived_file list; }
+
+type obj_kind =
+  | Object of object_params
+  | Archive of object_params archive
+
+let rec display_obj = function
+  | Object {filename; text_size; data_size; bss_size; sym_size; text_reloc_size; data_reloc_size; content = _; symbols} ->
+      Log.message "OBJ - %s, Text %d, Data = %d, BSS = %d, Symbols = %d, Text reloc = %d, Data reloc = %d, Symbol table = %d" filename text_size data_size bss_size sym_size text_reloc_size data_reloc_size (Hashtbl.length symbols)
+  | Archive {filename; content} ->
+      Log.message "ARCHIVE - %s" filename;
+      List.iter
+        (function {filename; data; _} ->
+          match data with
+          | None -> Log.message "FILE %s (unknown)" filename
+          | Some obj -> display_obj (Object obj)) content
 
 let read_byte s offset =
   let n = String.length s in
@@ -174,17 +197,22 @@ let read_string s offset =
     else raise (Invalid_argument "read_string")
   end else raise (Invalid_argument "read_string")
 
+let read_substring s offset len =
+  let n = String.length s in
+  if 0 <= offset && offset + len <= n then String.sub s offset len
+  else raise (Invalid_argument "read_substring")
+
 let symbol_type = function
-  | 0x01000000l -> Global None
-  | 0x02000000l -> Local Abs
-  | 0x03000000l -> Global (Some Abs)
-  | 0x04000000l -> Local Text
-  | 0x06000000l -> Local Data
-  | 0x08000000l -> Local Bss
-  | 0x05000000l -> Global (Some Text)
-  | 0x07000000l -> Global (Some Data)
-  | 0x09000000l -> Global (Some Bss)
-  | sym_type -> Log.error "Unknown symbol type 0x%08lx" sym_type
+  | 0x01000000l -> Some (Global None)
+  | 0x02000000l -> Some (Local Abs)
+  | 0x03000000l -> Some (Global (Some Abs))
+  | 0x04000000l -> Some (Local Text)
+  | 0x06000000l -> Some (Local Data)
+  | 0x08000000l -> Some (Local Bss)
+  | 0x05000000l -> Some (Global (Some Text))
+  | 0x07000000l -> Some (Global (Some Data))
+  | 0x09000000l -> Some (Global (Some Bss))
+  | _ -> None
 
 let string_of_section = function
   | Text -> "Text"
@@ -196,46 +224,111 @@ let string_of_symbol_type = function
   | Local sec -> Format.sprintf "Local(%s)" (string_of_section sec)
   | Global None -> "Global(unknown)"
   | Global (Some sec) -> Format.sprintf "Global(%s)" (string_of_section sec)
+  | Unknown flags -> Format.sprintf "Unknown(0x%08lx)" flags
 
-let mk_object filename content =
-  Log.message "loading object file %s" filename;
-  let text_size = Int32.to_int (read_long content 4) in
-  let data_size = Int32.to_int (read_long content 8) in
-  let bss_size = Int32.to_int (read_long content 12) in
-  let sym_size = Int32.to_int (read_long content 16) in
-  let text_reloc_size = Int32.to_int (read_long content 24) in
-  let data_reloc_size = Int32.to_int (read_long content 28) in
-  let symbols = Hashtbl.create 16 in
-  let fixup_base = 32 + text_size + data_size + text_reloc_size + data_reloc_size in
-  let symbol_base = fixup_base + sym_size in
-  let nsymbols = sym_size / 12 in
-  for i = 0 to nsymbols - 1 do
-    let offset = fixup_base + i * 12 in
-    let index = Int32.to_int (read_long content offset) in
-    let sym_type = symbol_type (read_long content (offset + 4)) in
-    let sym_value = read_long content (offset + 8) in
-    let sym_name = read_string content (symbol_base + index) in
-    if Hashtbl.mem symbols sym_name then Log.warning "Duplicated symbol %s in object file %s" sym_name filename;
-(* Log.message "new symbol %s (type = %s, value = 0x%08lx)" sym_name (string_of_symbol_type sym_type) sym_value; *)
-    Hashtbl.replace symbols sym_name (sym_type, sym_value)
-  done;
-  { filename;
-    text_size;
-    data_size;
-    bss_size;
-    sym_size;
-    text_reloc_size;
-    data_reloc_size;
-    symbols;
-    content }
+exception Not_an_object
+
+let load_object filename content =
+  let magic = read_long content 0 in
+  match magic with
+  | 0x0000107l
+  | 0x0020107l ->
+      Log.message "loading object file %s" filename;
+      let text_size = Int32.to_int (read_long content 4) in
+      let data_size = Int32.to_int (read_long content 8) in
+      let bss_size = Int32.to_int (read_long content 12) in
+      let sym_size = Int32.to_int (read_long content 16) in
+      let text_reloc_size = Int32.to_int (read_long content 24) in
+      let data_reloc_size = Int32.to_int (read_long content 28) in
+      let symbols = Hashtbl.create 16 in
+      let fixup_base = 32 + text_size + data_size + text_reloc_size + data_reloc_size in
+      let symbol_base = fixup_base + sym_size in
+      let nsymbols = sym_size / 12 in
+      for i = 0 to nsymbols - 1 do
+        let offset = fixup_base + i * 12 in
+        let index = Int32.to_int (read_long content offset) in
+        let sym_name = read_string content (symbol_base + index) in
+        let sym_type = read_long content (offset + 4) in
+        match symbol_type sym_type with
+        | Some sym_type ->
+            let sym_value = read_long content (offset + 8) in
+            if Hashtbl.mem symbols sym_name then Log.warning "Duplicated symbol %s in object file %s" sym_name filename;
+            Hashtbl.replace symbols sym_name (sym_type, sym_value)
+        | None ->
+            if false then Log.warning "ignoring symbol %s of type 0x%08lx" sym_name sym_type
+      done;
+      { filename;
+        text_size;
+        data_size;
+        bss_size;
+        sym_size;
+        text_reloc_size;
+        data_reloc_size;
+        symbols;
+        content }
+  | _ -> raise Not_an_object
+
+exception Not_an_archive
+
+let load_archive filename content =
+  let global_header = read_substring content 0 8 in
+  match global_header with
+  | "!<arch>\n" ->
+      Log.message "loading archive %s" filename;
+      let read_file offset =
+        let file_name = read_substring content offset 16 in
+        let timestamp = read_substring content (offset + 16) 12 in
+        let owner_id = read_substring content (offset + 28) 6 in
+        let group_id = read_substring content (offset + 34) 6 in
+        let file_mode = read_substring content (offset + 40) 8 in
+        let file_size = int_of_string (String.trim (read_substring content (offset + 48) 10)) in
+        let magic = read_word content (offset + 58) in
+        match magic with
+        | 0x600al ->
+            let file_content = read_substring content (offset + 60) file_size in
+            let data =
+              try Some (load_object file_name file_content)
+              with Not_an_object -> None
+            in
+            { filename = file_name;
+              timestamp;
+              owner_id;
+              group_id;
+              file_mode;
+              content = file_content;
+              data }
+        | _ ->
+            Log.error "Invalid magic number in archive 0x%04lx" magic
+      in
+      let size = String.length content in
+      let pad x = if x mod 2 = 0 then x else x + 1 in
+      let rec read_files accu offset =
+        if offset < size then
+          let file = read_file offset in
+          let offset = pad (offset + 60 + String.length file.content) in
+          read_files (file :: accu) offset
+        else List.rev accu
+      in
+      { filename;
+        content = read_files [] 8 }
+  | _ -> raise Not_an_archive
+
+let rec list_choose f = function
+  | [] -> []
+  | x :: xs ->
+      begin match f x with
+      | None -> list_choose f xs
+      | Some y -> y :: list_choose f xs
+      end
 
 let process_file = function
   | Object_or_archive filename ->
       let content = FileExt.load filename in
-      let magic = read_long content 0 in
-      begin match magic with
-      | 0x107l -> Obj (mk_object filename content)
-      | _ -> Log.error "Unknown magic id 0x%lx (file %s)" magic filename
+      begin try Object (load_object filename content)
+      with Not_an_object ->
+        begin try Archive (load_archive filename content)
+        with Not_an_archive -> Log.error "Cannot read file %s (unknown type)" filename
+        end
       end
   | Binary (symbol, filename) -> failwith "todo"
 
@@ -243,6 +336,6 @@ let main () =
   init_lib_directories();
   Arg.parse (mk_spec()) do_file info_string;
   let objects = List.map process_file (get_files()) in
-  List.iter display_obj objects
+  if false then List.iter display_obj objects
 
 let _ = main ()
