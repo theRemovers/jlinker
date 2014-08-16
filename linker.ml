@@ -16,6 +16,14 @@ let output_name = ref ""
 
 let lib_directories = ref []
 
+let get_path () = List.rev !lib_directories
+
+type file_type =
+  | Object_or_archive of string (* filename *)
+  | Binary of string (* label *) * string (* filename *)
+
+let files = ref []
+
 let get_segment_type msg = function
   | "r" | "R" -> Relocatable
   | "x" | "X" -> Contiguous
@@ -31,10 +39,11 @@ let set_text_segment_type x =
   | Contiguous -> Log.error "Error in text-segment address: cannot be contiguous"
 
 let do_file filename =
-  let path = List.rev !lib_directories in
+  let path = get_path() in
   try
     let real_filename = FileExt.find ~path ~ext:[".o"; ".a"] filename in
-    Log.message "File %s found: %s" filename real_filename
+    Log.message "File %s found: %s" filename real_filename;
+    files := Object_or_archive real_filename :: !files
   with Not_found ->
     Log.error "Cannot find file %s [search path = %s]" filename (String.concat ", " path)
 
@@ -56,6 +65,7 @@ let info_string =
 
 let main () =
   init_lib_directories();
+  let current_incbin = ref None in
   let open Arg in
   parse
     ["-a",
@@ -65,6 +75,26 @@ let main () =
      "<text> <data> <bss> output absolute file (hex value: segment address, r: relocatable segment, x: contiguous segment)";
 
      "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
+
+     "-i",
+     Tuple [String
+              (fun filename ->
+                let path = get_path() in
+                try
+                  let real_filename = FileExt.find ~path filename in
+                  Log.message "Binary file %s found: %s" filename real_filename;
+                  current_incbin := Some real_filename
+                with Not_found ->
+                  Log.error "Cannot find binary file %s [path = %s]" filename (String.concat ", " path));
+            String
+              (fun symbol ->
+                match !current_incbin with
+                | None -> assert false
+                | Some filename ->
+                    Log.message "Defining symbol %s for file %s" symbol filename;
+                    files := Binary (symbol, filename) :: !files;
+                    current_incbin := None)],
+     "<fname> <label> incbin <fname> and set <label>";
 
      "-n", Set noheaderflag, "output no file header to .abs file";
      "-o", String (fun s -> output_name := s), "<name> set output name";
