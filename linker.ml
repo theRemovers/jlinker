@@ -13,10 +13,15 @@ let verbose_mode = ref false
 let warning_enabled = ref false
 
 let coff_executable = ref false
+let noheaderflag = ref false
 
 let output_name = ref ""
 
 let lib_directories = ref []
+
+let log fmt = Printf.ksprintf (fun s -> if !verbose_mode then print_endline s else ()) fmt
+let warn fmt = Printf.ksprintf (fun s -> if !warning_enabled then print_endline s else ()) fmt
+let error fmt = Printf.ksprintf (fun s -> print_endline s; exit 1) fmt
 
 let get_segment_type msg = function
   | "r" | "R" -> Relocatable
@@ -24,13 +29,13 @@ let get_segment_type msg = function
   | n ->
       let n = Format.sprintf "0x%s" n in
       try Absolute (Int32.of_string n)
-      with Failure _ -> failwith (Printf.sprintf "Error in %s-segment address: cannot parse %s" msg n)
+      with Failure _ -> error "Error in %s-segment address: cannot parse %s" msg n
 
 let set_text_segment_type x =
   match x with
   | Relocatable
   | Absolute _ -> text_segment_type := Some x
-  | Contiguous -> failwith (Printf.sprintf "Error in text-segment address: cannot be contiguous")
+  | Contiguous -> error "Error in text-segment address: cannot be contiguous"
 
 let split sep s =
   let n = String.length s in
@@ -42,7 +47,45 @@ let split sep s =
   in
   aux 0 0
 
-let do_file s = failwith "todo"
+let file_exists filename = try close_in (open_in_bin filename); true with _ -> false
+
+let has_extension filename =
+  try ignore (Filename.chop_extension filename : string); true
+  with Invalid_argument _ -> false
+
+let find_file filename exts =
+  let has_ext = has_extension filename in
+  let find_aux filename =
+    if file_exists filename then filename
+    else if not has_ext then
+      let rec aux = function
+        | [] -> raise Not_found
+        | ext :: others ->
+            let filename_ext = filename ^ ext in
+            if file_exists filename_ext then filename_ext
+            else aux others
+      in
+      aux exts
+    else raise Not_found
+  in
+  try find_aux filename
+  with Not_found ->
+    if Filename.is_implicit filename then
+      let rec aux = function
+        | [] -> raise Not_found
+        | dir :: others ->
+            try find_aux (Filename.concat dir filename)
+            with Not_found -> aux others
+      in
+      aux !lib_directories
+    else raise Not_found
+
+let do_file filename =
+  try
+    let real_filename = find_file filename [".o"; ".a"] in
+    log "File %s found: %s" filename real_filename
+  with Not_found ->
+    error "Cannot find file %s" filename
 
 let main () =
   let open Arg in
@@ -55,6 +98,7 @@ let main () =
 
      "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
 
+     "-n", Set noheaderflag, "output no file header to .abs file";
      "-o", String (fun s -> output_name := s), "set output name";
 
      "-rw", Unit (fun () -> section_alignment := 1), "set alignment size to word size (2 bytes)";
