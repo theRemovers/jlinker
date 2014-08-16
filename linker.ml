@@ -9,9 +9,6 @@ let bss_segment_type = ref None
 
 let section_alignment = ref 7 (* phrase *)
 
-let verbose_mode = ref false
-let warning_enabled = ref false
-
 let coff_executable = ref false
 let noheaderflag = ref false
 
@@ -19,31 +16,27 @@ let output_name = ref ""
 
 let lib_directories = ref []
 
-let log fmt = Printf.ksprintf (fun s -> if !verbose_mode then print_endline s else ()) fmt
-let warn fmt = Printf.ksprintf (fun s -> if !warning_enabled then print_endline s else ()) fmt
-let error fmt = Printf.ksprintf (fun s -> print_endline s; exit 1) fmt
-
 let get_segment_type msg = function
   | "r" | "R" -> Relocatable
   | "x" | "X" -> Contiguous
   | n ->
       let n = Format.sprintf "0x%s" n in
       try Absolute (Int32.of_string n)
-      with Failure _ -> error "Error in %s-segment address: cannot parse %s" msg n
+      with Failure _ -> Log.error "Error in %s-segment address: cannot parse %s" msg n
 
 let set_text_segment_type x =
   match x with
   | Relocatable
   | Absolute _ -> text_segment_type := Some x
-  | Contiguous -> error "Error in text-segment address: cannot be contiguous"
+  | Contiguous -> Log.error "Error in text-segment address: cannot be contiguous"
 
 let do_file filename =
   let path = List.rev !lib_directories in
   try
     let real_filename = FileExt.find ~path ~ext:[".o"; ".a"] filename in
-    log "File %s found: %s" filename real_filename
+    Log.message "File %s found: %s" filename real_filename
   with Not_found ->
-    error "Cannot find file %s [search path = %s]" filename (String.concat ", " path)
+    Log.error "Cannot find file %s [search path = %s]" filename (String.concat ", " path)
 
 let init_lib_directories () =
   begin try
@@ -82,8 +75,8 @@ let main () =
      "-rd", Unit (fun () -> section_alignment := 15), "set alignment size to double phrase size (16 bytes)";
      "-rq", Unit (fun () -> section_alignment := 31), "set alignment size to quad phrase size (32 bytes)";
 
-     "-v", Set verbose_mode, "set verbose mode";
-     "-w", Set warning_enabled, "show linker warnings";
+     "-v", Unit (fun () -> Log.set_verbose_mode true), "set verbose mode";
+     "-w", Unit (fun () -> Log.set_warning_enabled true), "show linker warnings";
      "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
     ] do_file info_string
 
