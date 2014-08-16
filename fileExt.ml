@@ -30,3 +30,15 @@ let find ?(path = []) ?(ext = []) filename =
       in
       aux path
     else raise Not_found
+
+let load filename =
+  let ic = open_in_bin filename in
+  let buf = Buffer.create 256 in
+  try
+    while true do
+      Buffer.add_char buf (input_char ic)
+    done;
+    raise End_of_file
+  with End_of_file ->
+    close_in ic;
+    Buffer.contents buf
