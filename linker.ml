@@ -101,6 +101,7 @@ let init_lib_directories () =
     with Not_found -> ()
   in
   ()
+
 let info_string =
   let prelude = "Linker by Seb/The Removers (version "^(Version.version)^")" in
   prelude
