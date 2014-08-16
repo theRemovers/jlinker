@@ -215,7 +215,7 @@ let mk_object filename content =
     let sym_type = symbol_type (read_long content (offset + 4)) in
     let sym_value = read_long content (offset + 8) in
     let sym_name = read_string content (symbol_base + index) in
-    if Hashtbl.mem symbols sym_name then Log.warning "Duplicated symbol %s" sym_name;
+    if Hashtbl.mem symbols sym_name then Log.warning "Duplicated symbol %s in object file %s" sym_name filename;
 (* Log.message "new symbol %s (type = %s, value = 0x%08lx)" sym_name (string_of_symbol_type sym_type) sym_value; *)
     Hashtbl.replace symbols sym_name (sym_type, sym_value)
   done;
