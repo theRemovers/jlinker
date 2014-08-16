@@ -88,19 +88,16 @@ let do_file filename =
     error "Cannot find file %s [search path = %s]" filename (String.concat ", " !lib_directories)
 
 let init_lib_directories () =
-  let () =
-    try
-      let s = Sys.getenv "ALNPATH" in
-      lib_directories := split ':' s
-    with Not_found -> ()
-  in
-  let () =
-    try
-      let s = Sys.getenv "RLNPATH" in
-      lib_directories := !lib_directories @ split ':' s
-    with Not_found -> ()
-  in
-  ()
+  begin try
+    let s = Sys.getenv "ALNPATH" in
+    lib_directories := split ':' s
+  with Not_found -> ()
+  end;
+  begin try
+    let s = Sys.getenv "RLNPATH" in
+    lib_directories := !lib_directories @ split ':' s
+  with Not_found -> ()
+  end
 
 let info_string =
   let prelude = "Linker by Seb/The Removers (version "^(Version.version)^")" in
