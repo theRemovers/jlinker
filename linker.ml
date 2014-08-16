@@ -53,7 +53,7 @@ let has_extension filename =
   try ignore (Filename.chop_extension filename : string); true
   with Invalid_argument _ -> false
 
-let find_file filename exts =
+let find_file searchpath filename exts =
   let has_ext = has_extension filename in
   let find_aux filename =
     if file_exists filename then filename
@@ -77,29 +77,48 @@ let find_file filename exts =
             try find_aux (Filename.concat dir filename)
             with Not_found -> aux others
       in
-      aux !lib_directories
+      aux searchpath
     else raise Not_found
 
 let do_file filename =
   try
-    let real_filename = find_file filename [".o"; ".a"] in
+    let real_filename = find_file !lib_directories filename [".o"; ".a"] in
     log "File %s found: %s" filename real_filename
   with Not_found ->
-    error "Cannot find file %s" filename
+    error "Cannot find file %s [search path = %s]" filename (String.concat ", " !lib_directories)
+
+let init_lib_directories () =
+  let () =
+    try
+      let s = Sys.getenv "ALNPATH" in
+      lib_directories := split ':' s
+    with Not_found -> ()
+  in
+  let () =
+    try
+      let s = Sys.getenv "RLNPATH" in
+      lib_directories := !lib_directories @ split ':' s
+    with Not_found -> ()
+  in
+  ()
+let info_string =
+  let prelude = "Linker by Seb/The Removers (version "^(Version.version)^")" in
+  prelude
 
 let main () =
+  init_lib_directories();
   let open Arg in
   parse
     ["-a",
      Tuple [String (fun s -> set_text_segment_type (get_segment_type "text" s));
             String (fun s -> data_segment_type := Some (get_segment_type "data" s));
             String (fun s -> bss_segment_type := Some (get_segment_type "bss" s))],
-     "<text> <data> <bss> output absolute file (hex value: segment address, r: relocatable segment, x: contiguous segment";
+     "<text> <data> <bss> output absolute file (hex value: segment address, r: relocatable segment, x: contiguous segment)";
 
      "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
 
      "-n", Set noheaderflag, "output no file header to .abs file";
-     "-o", String (fun s -> output_name := s), "set output name";
+     "-o", String (fun s -> output_name := s), "<name> set output name";
 
      "-rw", Unit (fun () -> section_alignment := 1), "set alignment size to word size (2 bytes)";
      "-rl", Unit (fun () -> section_alignment := 3), "set alignment size to long size (4 bytes)";
@@ -109,7 +128,7 @@ let main () =
 
      "-v", Set verbose_mode, "set verbose mode";
      "-w", Set warning_enabled, "show linker warnings";
-     "-y", String (fun s -> lib_directories := split ':' s @ !lib_directories), "add directories to search path";
-    ] do_file "The Removers'Linker"
+     "-y", String (fun s -> lib_directories := !lib_directories @ split ':' s), "<dir1:dir2:...> add directories to search path";
+    ] do_file info_string
 
 let _ = main ()

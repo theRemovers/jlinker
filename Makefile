@@ -6,9 +6,9 @@ INCL=$(shell $(OCAMLC) -where)/site-lib/camlimages
 #OCAMLNLDFLAGS = -ccopt -static
 OCAMLFLAGS = -unsafe
 
-VERSION=0.1.10
+VERSION=0.0.1
 
-SRCML=linker.ml
+SRCML=version.ml linker.ml
 PROJECT=linker
 
 EXTRA=README Makefile
