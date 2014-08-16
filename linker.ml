@@ -47,42 +47,9 @@ let split sep s =
   in
   aux 0 0
 
-let file_exists filename = try close_in (open_in_bin filename); true with _ -> false
-
-let has_extension filename =
-  try ignore (Filename.chop_extension filename : string); true
-  with Invalid_argument _ -> false
-
-let find_file searchpath filename exts =
-  let has_ext = has_extension filename in
-  let find_aux filename =
-    if file_exists filename then filename
-    else if not has_ext then
-      let rec aux = function
-        | [] -> raise Not_found
-        | ext :: others ->
-            let filename_ext = filename ^ ext in
-            if file_exists filename_ext then filename_ext
-            else aux others
-      in
-      aux exts
-    else raise Not_found
-  in
-  try find_aux filename
-  with Not_found ->
-    if Filename.is_implicit filename then
-      let rec aux = function
-        | [] -> raise Not_found
-        | dir :: others ->
-            try find_aux (Filename.concat dir filename)
-            with Not_found -> aux others
-      in
-      aux searchpath
-    else raise Not_found
-
 let do_file filename =
   try
-    let real_filename = find_file !lib_directories filename [".o"; ".a"] in
+    let real_filename = FileExt.find ~path:!lib_directories ~ext:[".o"; ".a"] filename in
     log "File %s found: %s" filename real_filename
   with Not_found ->
     error "Cannot find file %s [search path = %s]" filename (String.concat ", " !lib_directories)
