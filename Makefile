@@ -5,7 +5,7 @@ OCAMLDEP=ocamldep
 INCL=
 
 #OCAMLNLDFLAGS = -ccopt -static
-OCAMLFLAGS = -unsafe -annot
+OCAMLFLAGS=-unsafe -annot -warn-error +a
 
 VERSION=0.0.1
 
