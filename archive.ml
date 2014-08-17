@@ -79,3 +79,7 @@ let load_archive archname content =
   | _ -> None
 
 let map f {filename; content} = {filename; content = List.map f content}
+
+let map_data f archive =
+  let aux ({data; _} as file) = {file with data = f data} in
+  map aux archive

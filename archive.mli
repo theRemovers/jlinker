@@ -14,3 +14,5 @@ type 'a t =
 val load_archive: string -> string -> string t option
 
 val map: ('a archived_file -> 'b archived_file) -> 'a t -> 'b t
+
+val map_data: ('a -> 'b) -> 'a t -> 'b t
