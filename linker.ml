@@ -144,21 +144,14 @@ type 'a archive =
 
 type obj_kind =
   | Object of object_params
-  | Archive of object_params archive_content archive
+  | Archive of object_params Archive.t
 
 let rec display_obj = function
   | Object {filename; text_size; data_size; bss_size; sym_size; text_reloc_size; data_reloc_size; _} ->
       Log.message "OBJ - %s, Text %d, Data = %d, BSS = %d, Symbols = %d, Text reloc = %d, Data reloc = %d" filename text_size data_size bss_size sym_size text_reloc_size data_reloc_size
-  | Archive {filename; content} ->
+  | Archive {Archive.filename; content} ->
       Log.message "ARCHIVE - %s" filename;
-      List.iter
-        (function {filename; data; _} ->
-          match data with
-          | Defined_symbols syms -> Log.message "Defined symbols: %s" (String.concat ", " (List.map (fun (name, offset) -> Format.sprintf "%s [0x%08x]" name offset) syms))
-          | Extended_filenames names -> Log.message "Extended filenames: %s" (String.concat ", " names)
-          | Other (offset, None) -> Log.message "FILE %s at offset 0x%08x (unknown)" filename offset
-          | Other (offset, Some obj) ->
-              Log.message "OBJ at offset 0x%08x" offset; display_obj (Object obj)) content
+      List.iter (function {Archive.filename; data; _} -> display_obj (Object data)) content
 
 let t_global_mask = 0x01000000l
 
@@ -181,7 +174,7 @@ let load_object filename content =
       for i = 0 to nsymbols - 1 do
         let offset = fixup_base + i * 12 in
         let index = Int32.to_int (StringExt.read_long content offset) in
-        let sym_name = StringExt.read_string content (symbol_base + index) in
+        let sym_name = StringExt.read_string content (symbol_base + index) '\000' in
         let sym_type = StringExt.read_long content (offset + 4) in
         let sym_value = StringExt.read_long content (offset + 8) in
         let warn sym_name =
@@ -212,86 +205,15 @@ let load_object filename content =
           content }
   | _ -> None
 
-let load_archive archname content load_file =
-  let global_header = StringExt.read_substring content 0 8 in
-  match global_header with
-  | "!<arch>\n" ->
-      let extended_filenames = ref [] in
-      let read_file offset =
-        let filename = StringExt.read_substring content offset 16 in
-        let timestamp = StringExt.read_substring content (offset + 16) 12 in
-        let owner_id = StringExt.read_substring content (offset + 28) 6 in
-        let group_id = StringExt.read_substring content (offset + 34) 6 in
-        let file_mode = StringExt.read_substring content (offset + 40) 8 in
-        let data_size = int_of_string (String.trim (StringExt.read_substring content (offset + 48) 10)) in
-        let data_offset = offset + 60 in
-        let magic = StringExt.read_word content (offset + 58) in
-        match magic with
-        | 0x600al ->
-            let data = StringExt.read_substring content data_offset data_size in
-            begin match filename with
-            | "ARFILENAMES/    " ->
-                let names = List.filter (fun s -> s <> "") (StringExt.split '\n' data) in
-                extended_filenames := names;
-                { filename;
-                  timestamp;
-                  owner_id;
-                  group_id;
-                  file_mode;
-                  data_size;
-                  data = Extended_filenames names }
-            | "__.SYMDEF       " ->
-                let nsymbols = (Int32.to_int (StringExt.read_long data 0)) / 8 in
-                let name_base = nsymbols * 8 + 8 in
-                let symbols = ref [] in
-                for i = 0 to nsymbols - 1 do
-                  let offset = 4 + i * 8 in
-                  let name_offset = Int32.to_int (StringExt.read_long data offset) in
-                  let object_offset = Int32.to_int (StringExt.read_long data (offset + 4)) in
-                  let name = StringExt.read_string data (name_base + name_offset) in
-                  symbols := (name, object_offset) :: !symbols;
-                done;
-                { filename;
-                  timestamp;
-                  owner_id;
-                  group_id;
-                  file_mode;
-                  data_size;
-                  data = Defined_symbols (List.rev !symbols) }
-            | _ ->
-                let filename =
-                  if filename.[0] = ' ' then begin
-                    match !extended_filenames with
-                    | [] -> filename
-                    | name :: names ->
-                        extended_filenames := names;
-                        name
-                  end else String.trim filename
-                in
-                let data = Other (offset, load_file filename data) in
-                { filename;
-                  timestamp;
-                  owner_id;
-                  group_id;
-                  file_mode;
-                  data_size;
-                  data }
-            end
-        | _ -> ffailwith "Invalid magic number in archive 0x%04lx" magic
-      in
-      let size = String.length content in
-      let pad x = if x mod 2 = 0 then x else x + 1 in
-      let rec read_files accu offset =
-        if offset < size then
-          let file = read_file offset in
-          let offset = pad (offset + 60 + file.data_size) in
-          read_files (file :: accu) offset
-        else List.rev accu
-      in
-      Some
-        { filename = archname;
-          content = read_files [] 8 }
-  | _ -> None
+let load_archive archname content =
+  let f ({Archive.filename; data; _} as file) =
+    match load_object filename data with
+    | None -> ffailwith "unsupported file in archive %s" archname
+    | Some obj -> {file with Archive.data = obj}
+  in
+  match Archive.load_archive archname content with
+  | None -> None
+  | Some archive -> Some (Archive.map f archive)
 
 let rec list_choose f = function
   | [] -> []
@@ -306,7 +228,7 @@ let process_file = function
       let content = FileExt.load filename in
       begin match load_object filename content with
       | None ->
-          begin match load_archive filename content load_object with
+          begin match load_archive filename content with
           | None -> ffailwith "Cannot read file %s (unknown type)" filename
           | Some archive -> Archive archive
           end

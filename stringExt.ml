@@ -43,11 +43,11 @@ let read_long s offset =
     Int32.logor (Int32.shift_left hi 16) lo
   else raise (Invalid_argument "read_long")
 
-let read_string s offset =
+let read_string s offset sep =
   let n = String.length s in
   if 0 <= offset && offset < n then begin
     let i = ref offset in
-    while (!i < n) && (s.[!i] <> '\000') do
+    while (!i < n) && (s.[!i] <> sep) do
       incr i;
     done;
     if !i < n then String.sub s offset (!i - offset)
