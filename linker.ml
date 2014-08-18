@@ -232,13 +232,30 @@ let hashtbl_choose tbl =
 let defined_by_linker = ["_BSS_E"]
 
 let solve problem =
-  let undefined = Hashtbl.create 16 in
-  let defined = Hashtbl.create 16 in
-  let unresolved = Hashtbl.create 16 in
-  List.iter (fun sym_name -> Hashtbl.replace defined sym_name ()) defined_by_linker;
+  let undef_tbl = Hashtbl.create 16 in
+  let def_tbl = Hashtbl.create 16 in
+  let is_defined sym_name = Hashtbl.mem def_tbl sym_name in
+  let mark_defined sym_name =
+    if Hashtbl.mem def_tbl sym_name then begin
+      Log.warning "Symbol %s is defined several times" sym_name;
+      assert (Hashtbl.find def_tbl sym_name)
+    end;
+    Hashtbl.remove undef_tbl sym_name;
+    Hashtbl.replace def_tbl sym_name true
+  in
+  let mark_unresolved sym_name =
+    assert (not (Hashtbl.mem def_tbl sym_name));
+    Hashtbl.remove undef_tbl sym_name;
+    Hashtbl.replace def_tbl sym_name false
+  in
+  let mark_undefined sym_name =
+    if is_defined sym_name then ()
+    else Hashtbl.replace undef_tbl sym_name ()
+  in
+  List.iter mark_defined defined_by_linker;
   let add_object {global_undefined; global_symbols; _} =
-    Hashtbl.iter (fun sym_name _ -> Hashtbl.remove undefined sym_name; Hashtbl.replace defined sym_name ()) global_symbols;
-    Hashtbl.iter (fun sym_name _ -> if not (Hashtbl.mem defined sym_name) && not (Hashtbl.mem unresolved sym_name) then Hashtbl.replace undefined sym_name ()) global_undefined
+    Hashtbl.iter (fun sym_name _ -> mark_defined sym_name) global_symbols;
+    Hashtbl.iter (fun sym_name _ -> mark_undefined sym_name) global_undefined
   in
   let problem =
     let f = function
@@ -275,27 +292,36 @@ let solve problem =
           obj, x :: xs
         end
   in
+  let rec get_objects = function
+    | [] -> []
+    | Object (b, obj) :: tl -> if b then obj :: get_objects tl else get_objects tl
+    | Archive {Archive.content; filename = archname} :: tl ->
+        let objs = get_objects (List.map (function {Archive.data; _} -> Object data) content) in
+        let fullname name = archname ^ "/" ^ name in
+        let objs = List.map (function ({filename; _} as obj) -> {obj with filename = fullname filename}) objs in
+        objs @ get_objects tl
+  in
   let problem = ref problem in
-  while Hashtbl.length undefined > 0 do
-    let sym_name = hashtbl_choose undefined in
+  while Hashtbl.length undef_tbl > 0 do
+    let sym_name = hashtbl_choose undef_tbl in
     begin try
       let obj, new_problem = update_problem sym_name !problem in
       add_object obj;
       problem := new_problem
     with Not_found ->
-      Hashtbl.replace unresolved sym_name ();
-      Hashtbl.remove undefined sym_name
+      mark_unresolved sym_name
     end;
   done;
-  Hashtbl.iter (fun sym_name () -> Printf.printf "%s is unresolved\n" sym_name) unresolved;
-  !problem
+  Hashtbl.iter (fun sym_name b -> if not b then Printf.printf "%s is unresolved\n" sym_name) def_tbl;
+  get_objects !problem
 
 let main () =
   try
     init_lib_directories();
     Arg.parse (mk_spec()) do_file info_string;
     let objects = List.map process_file (get_files()) in
-    solve objects
+    let solution = solve objects in
+    List.iter (function {filename; _} -> Printf.printf "Keeping %s\n" filename) solution
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)
