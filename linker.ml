@@ -112,25 +112,29 @@ let mk_spec () =
    "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
   ]
 
+type symbol =
+    { symbol_name: string;
+      symbol_type: Int32.t;
+      symbol_value: Int32.t; }
+
 type object_params =
     { filename: string;
-      text_size: int;
-      data_size: int;
-      bss_size: int;
-      sym_size: int;
-      text_reloc_size: int;
-      data_reloc_size: int;
-      global_symbols: (string, Int32.t) Hashtbl.t;
-      global_undefined: (string, unit) Hashtbl.t;
-      content: string; }
+      text_section: string;
+      data_section: string;
+      bss_section_size: int;
+      text_reloc: string;
+      data_reloc: string;
+      symbols: symbol list;
+      global_symbols: (string, Int32.t * Int32.t) Hashtbl.t;
+      global_undefined: (string, unit) Hashtbl.t; }
 
 type 'a obj_kind =
   | Object of 'a
   | Archive of 'a Archive.t
 
 let rec display_obj = function
-  | Object {filename; text_size; data_size; bss_size; sym_size; text_reloc_size; data_reloc_size; _} ->
-      Log.message "OBJ - %s, Text %d, Data = %d, BSS = %d, Symbols = %d, Text reloc = %d, Data reloc = %d" filename text_size data_size bss_size sym_size text_reloc_size data_reloc_size
+  | Object {filename; _} ->
+      Log.message "OBJ - %s" filename
   | Archive {Archive.filename; content} ->
       Log.message "ARCHIVE - %s" filename;
       List.iter (function {Archive.filename; data; _} -> display_obj (Object data)) content
@@ -144,45 +148,60 @@ let load_object filename content =
   | 0x0020107l ->
       let text_size = Int32.to_int (StringExt.read_long content 4) in
       let data_size = Int32.to_int (StringExt.read_long content 8) in
-      let bss_size = Int32.to_int (StringExt.read_long content 12) in
-      let sym_size = Int32.to_int (StringExt.read_long content 16) in
+      let bss_section_size = Int32.to_int (StringExt.read_long content 12) in
       let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
       let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
+      let sym_size = Int32.to_int (StringExt.read_long content 16) in
+      let offset = 32 in
+      let text_section = StringExt.read_substring content offset text_size in
+      let offset = offset + text_size in
+      let data_section = StringExt.read_substring content offset data_size in
+      let offset = offset + data_size in
+      let text_reloc = StringExt.read_substring content offset text_reloc_size in
+      let offset = offset + text_reloc_size in
+      let data_reloc = StringExt.read_substring content offset data_reloc_size in
+      let offset = offset + data_reloc_size in
+      let symbol_table = StringExt.read_substring content offset sym_size in
+      let offset = offset + sym_size in
+      let symbol_names = StringExt.read_substring content offset (String.length content - offset) in
+      let symbols = ref [] in
+      for i = 0 to sym_size / 12 - 1 do
+        let offset = i * 12 in
+        let index = Int32.to_int (StringExt.read_long symbol_table offset) in
+        let symbol_name = StringExt.read_string symbol_names index '\000' in
+        let symbol_type = StringExt.read_long symbol_table (offset + 4) in
+        let symbol_value = StringExt.read_long symbol_table (offset + 8) in
+        let symbol = {symbol_name; symbol_type; symbol_value} in
+        symbols := symbol :: !symbols
+      done;
+      let symbols = List.rev !symbols in
       let global_symbols = Hashtbl.create 16 in
       let global_undefined = Hashtbl.create 16 in
-      let fixup_base = 32 + text_size + data_size + text_reloc_size + data_reloc_size in
-      let symbol_base = fixup_base + sym_size in
-      let nsymbols = sym_size / 12 in
-      for i = 0 to nsymbols - 1 do
-        let offset = fixup_base + i * 12 in
-        let index = Int32.to_int (StringExt.read_long content offset) in
-        let sym_name = StringExt.read_string content (symbol_base + index) '\000' in
-        let sym_type = StringExt.read_long content (offset + 4) in
-        let sym_value = StringExt.read_long content (offset + 8) in
-        let warn sym_name =
-          if Hashtbl.mem global_symbols sym_name || Hashtbl.mem global_undefined sym_name then
-            Log.warning "Duplicated symbol %s in object file %s" sym_name filename;
+      let f {symbol_name; symbol_type; symbol_value} =
+        let warn () =
+          if Hashtbl.mem global_symbols symbol_name || Hashtbl.mem global_undefined symbol_name then
+            Log.warning "Duplicated symbol %s in object file %s" symbol_name filename;
         in
-        if Int32.logand sym_type t_global_mask = 0l then ()
-        else if sym_type = t_global_mask && sym_value = 0l then begin
-          warn sym_name;
-          Hashtbl.replace global_undefined sym_name ()
+        if Int32.logand symbol_type t_global_mask = 0l then ()
+        else if symbol_type = t_global_mask && symbol_value = 0l then begin
+          warn ();
+          Hashtbl.replace global_undefined symbol_name ()
         end else begin
-          warn sym_name;
-          Hashtbl.replace global_symbols sym_name sym_value
+          warn ();
+          Hashtbl.replace global_symbols symbol_name (symbol_type, symbol_value)
         end
-      done;
+      in
+      List.iter f symbols;
       Some
         { filename;
-          text_size;
-          data_size;
-          bss_size;
-          sym_size;
-          text_reloc_size;
-          data_reloc_size;
+          text_section;
+          data_section;
+          bss_section_size;
+          text_reloc;
+          data_reloc;
+          symbols;
           global_symbols;
-          global_undefined;
-          content }
+          global_undefined; }
   | _ -> None
 
 let load_archive archname content =

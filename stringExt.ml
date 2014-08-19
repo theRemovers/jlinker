@@ -58,3 +58,32 @@ let read_substring s offset len =
   let n = String.length s in
   if 0 <= offset && offset + len <= n then String.sub s offset len
   else raise (Invalid_argument "read_substring")
+
+module Bytes : sig
+  type t
+
+  val length: t -> int
+
+  val get: t -> int -> char
+  val set: t -> int -> char -> unit
+
+  val to_string: t -> string
+  val of_string: string -> t
+end = struct
+  type t = string
+
+  let length s = String.length s
+
+  let get s offset = s.[offset]
+  let set s offset c = s.[offset] <- c
+
+  let to_string s = s
+  let of_string s = s
+end
+
+type bytes = Bytes.t
+
+let write_byte s offset v =
+  let n = Bytes.length s in
+  if 0 <= offset && offset < n then Bytes.set s offset (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
+  else raise (Invalid_argument "write_byte")
