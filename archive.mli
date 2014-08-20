@@ -9,7 +9,7 @@ type 'a archived_file =
 
 type 'a t =
     { filename: string;
-      content: 'a archived_file list; }
+      content: 'a archived_file array; }
 
 val load_archive: string -> string -> string t option
 

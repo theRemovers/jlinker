@@ -124,7 +124,7 @@ type object_params =
       bss_section_size: int;
       text_reloc: string;
       data_reloc: string;
-      symbols: symbol list;
+      symbols: symbol array;
       global_symbols: (string, Int32.t * Int32.t) Hashtbl.t;
       global_undefined: (string, unit) Hashtbl.t; }
 
@@ -137,7 +137,7 @@ let rec display_obj = function
       Log.message "OBJ - %s" filename
   | Archive {Archive.filename; content} ->
       Log.message "ARCHIVE - %s" filename;
-      List.iter (function {Archive.filename; data; _} -> display_obj (Object data)) content
+      Array.iter (function {Archive.filename; data; _} -> display_obj (Object data)) content
 
 let t_global_mask = 0x01000000l
 
@@ -164,17 +164,16 @@ let load_object filename content =
       let symbol_table = StringExt.read_substring content offset sym_size in
       let offset = offset + sym_size in
       let symbol_names = StringExt.read_substring content offset (String.length content - offset) in
-      let symbols = ref [] in
-      for i = 0 to sym_size / 12 - 1 do
-        let offset = i * 12 in
-        let index = Int32.to_int (StringExt.read_long symbol_table offset) in
-        let symbol_name = StringExt.read_string symbol_names index '\000' in
-        let symbol_type = StringExt.read_long symbol_table (offset + 4) in
-        let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-        let symbol = {symbol_name; symbol_type; symbol_value} in
-        symbols := symbol :: !symbols
-      done;
-      let symbols = List.rev !symbols in
+      let symbols =
+        Array.init (sym_size / 12)
+          (fun i ->
+            let offset = i * 12 in
+            let index = Int32.to_int (StringExt.read_long symbol_table offset) in
+            let symbol_name = StringExt.read_string symbol_names index '\000' in
+            let symbol_type = StringExt.read_long symbol_table (offset + 4) in
+            let symbol_value = StringExt.read_long symbol_table (offset + 8) in
+            {symbol_name; symbol_type; symbol_value})
+      in
       let global_symbols = Hashtbl.create 16 in
       let global_undefined = Hashtbl.create 16 in
       let f {symbol_name; symbol_type; symbol_value} =
@@ -191,7 +190,7 @@ let load_object filename content =
           Hashtbl.replace global_symbols symbol_name (symbol_type, symbol_value)
         end
       in
-      List.iter f symbols;
+      Array.iter f symbols;
       Some
         { filename;
           text_section;
@@ -283,56 +282,45 @@ let solve problem =
     in
     List.map f problem
   in
-  let update_archive sym_name ({Archive.content; _} as archive) =
-    let rec aux = function
-      | [] -> raise Not_found
-      | ({Archive.data = (selected, ({global_symbols; _} as obj))} as file) :: files ->
-          if not selected && Hashtbl.mem global_symbols sym_name then
-            let new_file = {file with Archive.data = (true, obj)} in
-            obj, new_file :: files
-          else
-            let obj, files = aux files in
-            obj, file :: files
+  let update_archive sym_name {Archive.content; _} =
+    let n = Array.length content in
+    let rec aux i =
+      if i < n then
+        let ({Archive.data = (selected, ({global_symbols; _} as obj))} as file) = content.(i) in
+        if not selected && Hashtbl.mem global_symbols sym_name then
+          let new_file = {file with Archive.data = (true, obj)} in
+          content.(i) <- new_file;
+          obj
+        else aux (i+1)
+      else raise Not_found
     in
-    let obj, new_content = aux content in
-    obj, { archive with Archive.content = new_content }
+    let obj = aux 0 in
+    obj
   in
   let rec update_problem sym_name = function
     | [] -> raise Not_found
-    | ((Object _) as x) :: xs ->
-        let obj, xs = update_problem sym_name xs in
-        obj, x :: xs
-    | ((Archive archive) as x) :: xs ->
-        begin try
-          let obj, archive = update_archive sym_name archive in
-          obj, (Archive archive) :: xs
-        with Not_found ->
-          let obj, xs = update_problem sym_name xs in
-          obj, x :: xs
+    | (Object _) :: xs -> update_problem sym_name xs
+    | (Archive archive) :: xs ->
+        begin try update_archive sym_name archive
+        with Not_found -> update_problem sym_name xs
         end
   in
   let rec get_objects = function
     | [] -> []
     | Object (b, obj) :: tl -> if b then obj :: get_objects tl else get_objects tl
     | Archive {Archive.content; filename = archname} :: tl ->
-        let objs = get_objects (List.map (function {Archive.data; _} -> Object data) content) in
+        let objs = get_objects (Array.to_list (Array.map (function {Archive.data; _} -> Object data) content)) in
         let fullname name = archname ^ "/" ^ name in
         let objs = List.map (function ({filename; _} as obj) -> {obj with filename = fullname filename}) objs in
         objs @ get_objects tl
   in
-  let problem = ref problem in
   while Hashtbl.length undef_tbl > 0 do
     let sym_name = hashtbl_choose undef_tbl in
-    begin try
-      let obj, new_problem = update_problem sym_name !problem in
-      add_object obj;
-      problem := new_problem
-    with Not_found ->
-      mark_unresolved sym_name
-    end;
+    try add_object (update_problem sym_name problem)
+    with Not_found -> mark_unresolved sym_name
   done;
   Hashtbl.iter (fun sym_name b -> if not b then Printf.printf "%s is unresolved\n" sym_name) def_tbl;
-  get_objects !problem
+  get_objects problem
 
 let main () =
   try

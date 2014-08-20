@@ -9,7 +9,7 @@ type 'a archived_file =
 
 type 'a t =
     { filename: string;
-      content: 'a archived_file list; }
+      content: 'a archived_file array; }
 
 let load_archive archname content =
   let global_header = StringExt.read_substring content 0 8 in
@@ -75,10 +75,10 @@ let load_archive archname content =
           read_files extended_filenames content next_offset
         else List.rev content
       in
-      Some {filename = archname; content = read_files None [] 8}
+      Some {filename = archname; content = Array.of_list (read_files None [] 8)}
   | _ -> None
 
-let map f {filename; content} = {filename; content = List.map f content}
+let map f {filename; content} = {filename; content = Array.map f content}
 
 let map_data f archive =
   let aux ({data; _} as file) = {file with data = f data} in
