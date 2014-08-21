@@ -2,10 +2,19 @@ type machine = M68000 | M68010 | M68020
 
 type magic = OMAGIC
 
+type section = Undefined | Absolute | Text | Data | Bss
+
+type symbol_type =
+  | Local of section
+  | External of section
+  | Other of int
+
 type symbol =
     { 
       symbol_name: string;
-      symbol_type: Int32.t;
+      symbol_type: symbol_type;
+      symbol_other: int;
+      symbol_desc: int;
       symbol_value: Int32.t; 
     }
 
@@ -31,6 +40,31 @@ let get_machine = function
 let get_magic = function
   | 0o407l -> Some OMAGIC
   | _ -> None
+
+let string_of_section = function
+  | Undefined -> "undef"
+  | Absolute -> "abs"
+  | Text -> "text"
+  | Data -> "data"
+  | Bss -> "bss"
+
+let string_of_symbol_type = function
+  | Local section -> Format.sprintf "local[%s]" (string_of_section section)
+  | External section -> Format.sprintf "external[%s]" (string_of_section section)
+  | Other x -> Format.sprintf "other[0x%02x]" x
+
+let get_symbol_type = function
+  | 0l -> Local Undefined
+  | 1l -> External Undefined
+  | 2l -> Local Absolute
+  | 3l -> External Absolute
+  | 4l -> Local Text
+  | 5l -> External Text
+  | 6l -> Local Data
+  | 7l -> External Data
+  | 8l -> Local Bss
+  | 9l -> External Bss
+  | x -> Printf.printf "other[0x%02lx]" x; Other (Int32.to_int x)
 
 let load_object name content =
   let mach = StringExt.read_word content 0 in
@@ -61,9 +95,12 @@ let load_object name content =
             let offset = i * 12 in
             let index = Int32.to_int (StringExt.read_long symbol_table offset) in
             let symbol_name = StringExt.read_string symbol_names index '\000' in
-            let symbol_type = StringExt.read_long symbol_table (offset + 4) in
+            let symbol_type = get_symbol_type (StringExt.read_byte symbol_table (offset + 4)) in
+            let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
+            let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
             let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-            {symbol_name; symbol_type; symbol_value})
+	    Printf.printf "0x%02x 0x%04x 0x%08lx %s [%s]\n" symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name;
+            {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value})
       in
       Some
 	{

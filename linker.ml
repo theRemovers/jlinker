@@ -142,6 +142,7 @@ let rec display_obj = function
 let t_global_mask = 0x01000000l
 
 let load_object filename content =
+  let _ = Aout.load_object filename content in
   let magic = StringExt.read_long content 0 in
   match magic with
   | 0x0000107l
