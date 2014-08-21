@@ -64,7 +64,7 @@ let get_symbol_type = function
   | 7l -> External Data
   | 8l -> Local Bss
   | 9l -> External Bss
-  | x -> Printf.printf "other[0x%02lx]" x; Other (Int32.to_int x)
+  | x -> Other (Int32.to_int x)
 
 let load_object name content =
   let mach = StringExt.read_word content 0 in
@@ -99,7 +99,7 @@ let load_object name content =
             let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
             let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
             let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-	    Printf.printf "0x%02x 0x%04x 0x%08lx %s [%s]\n" symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name;
+	    (* Printf.printf "0x%02x 0x%04x 0x%08lx %s [%s]\n" symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name; *)
             {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value})
       in
       Some
