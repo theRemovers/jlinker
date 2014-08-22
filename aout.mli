@@ -23,7 +23,7 @@ type stab_type =
   | LCSYM (* BSS-segment variable with internal linkage *)
 
 type symbol_type =
-  | Symbol of location * section
+  | Type of location * section
   | Stab of stab_type
   | Other of int
 
@@ -36,6 +36,21 @@ type symbol =
       symbol_value: Int32.t; 
     }
 
+type length = Byte | Word | Long
+
+type symbol_num = 
+  | Symbol of int 
+  | Type of location * section
+
+type reloc_info = 
+    {
+      reloc_address: int;
+      symbol_num: symbol_num;
+      pc_relative: bool;
+      length: length;
+      other_flags: int;
+    }
+
 type object_params =
     { 
       name: string;
@@ -44,8 +59,8 @@ type object_params =
       text_section: string;
       data_section: string;
       bss_section_size: int;
-      text_reloc: string;
-      data_reloc: string;
+      text_reloc: reloc_info list;
+      data_reloc: reloc_info list;
       symbols: symbol array;
     }
 
