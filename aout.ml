@@ -4,9 +4,28 @@ type magic = OMAGIC
 
 type section = Undefined | Absolute | Text | Data | Bss
 
+type location = Local | External
+
+type stab_type = 
+    (* see stab.def *)
+  | SO (* name of source file name *)
+  | SOL (* name of sub-source file *)
+  | SLINE (* line number in text segment *)
+  | OPT (* options for the debugger *)
+  | LSYM (* automatic variable in the stack *)
+  | BNSYM (* beginning of a relocatable function block *)
+  | FUN (* function name or text-segment variable *)
+  | PSYM (* parameter variable *)
+  | LBRAC (* beginning of lexical block *)
+  | RBRAC (* end of lexical block *)
+  | RSYM (* register variable *)
+  | STSYM (* data-segment variable with internal linkage *)
+  | GSYM (* global variable *)
+  | LCSYM (* BSS-segment variable with internal linkage *)
+
 type symbol_type =
-  | Local of section
-  | External of section
+  | Symbol of location * section
+  | Stab of stab_type
   | Other of int
 
 type symbol =
@@ -48,22 +67,53 @@ let string_of_section = function
   | Data -> "data"
   | Bss -> "bss"
 
+let string_of_stab = function
+  | OPT -> "OPT"
+  | SO -> "SO"
+  | SOL -> "SOL"
+  | SLINE -> "SLINE"
+  | LSYM -> "LSYM"
+  | BNSYM -> "BNSYM"
+  | FUN -> "FUN"
+  | PSYM -> "PSYM"
+  | LBRAC -> "LBRAC"
+  | RBRAC -> "RBRAC"
+  | RSYM -> "RSYM"
+  | STSYM -> "STSYM"
+  | GSYM -> "GSYM"
+  | LCSYM -> "LCSYM"
+
 let string_of_symbol_type = function
-  | Local section -> Format.sprintf "local[%s]" (string_of_section section)
-  | External section -> Format.sprintf "external[%s]" (string_of_section section)
+  | Symbol (Local, section) -> Format.sprintf "local[%s]" (string_of_section section)
+  | Symbol (External, section) -> Format.sprintf "external[%s]" (string_of_section section)
+  | Stab typ -> Format.sprintf "stab[%s]" (string_of_stab typ)
   | Other x -> Format.sprintf "other[0x%02x]" x
 
 let get_symbol_type = function
-  | 0l -> Local Undefined
-  | 1l -> External Undefined
-  | 2l -> Local Absolute
-  | 3l -> External Absolute
-  | 4l -> Local Text
-  | 5l -> External Text
-  | 6l -> Local Data
-  | 7l -> External Data
-  | 8l -> Local Bss
-  | 9l -> External Bss
+  | 0l -> Symbol (Local, Undefined)
+  | 1l -> Symbol (External, Undefined)
+  | 2l -> Symbol (Local, Absolute)
+  | 3l -> Symbol (External, Absolute)
+  | 4l -> Symbol (Local, Text)
+  | 5l -> Symbol (External, Text)
+  | 6l -> Symbol (Local, Data)
+  | 7l -> Symbol (External, Data)
+  | 8l -> Symbol (Local, Bss)
+  | 9l -> Symbol (External, Bss)
+  | 0x20l -> Stab GSYM
+  | 0x24l -> Stab FUN
+  | 0x26l -> Stab STSYM
+  | 0x28l -> Stab LCSYM
+  | 0x2el -> Stab BNSYM
+  | 0x3cl -> Stab OPT
+  | 0x40l -> Stab RSYM
+  | 0x44l -> Stab SLINE
+  | 0x64l -> Stab SO
+  | 0x80l -> Stab LSYM
+  | 0x84l -> Stab SOL
+  | 0xa0l -> Stab PSYM
+  | 0xc0l -> Stab LBRAC
+  | 0xe0l -> Stab RBRAC
   | x -> Other (Int32.to_int x)
 
 let load_object name content =
@@ -99,7 +149,7 @@ let load_object name content =
             let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
             let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
             let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-	    (* Printf.printf "0x%02x 0x%04x 0x%08lx %s [%s]\n" symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name; *)
+	    Printf.printf "0x%02x 0x%04x 0x%08lx %s [%s]\n" symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name;
             {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value})
       in
       Some

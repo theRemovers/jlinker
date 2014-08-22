@@ -4,9 +4,27 @@ type magic = OMAGIC
 
 type section = Undefined | Absolute | Text | Data | Bss
 
+type location = Local | External
+
+type stab_type = 
+  | SO (* name of source file name *)
+  | SOL (* name of sub-source file *)
+  | SLINE (* line number in text segment *)
+  | OPT (* options for the debugger *)
+  | LSYM (* automatic variable in the stack *)
+  | BNSYM (* beginning of a relocatable function block *)
+  | FUN (* function name or text-segment variable *)
+  | PSYM (* parameter variable *)
+  | LBRAC (* beginning of lexical block *)
+  | RBRAC (* end of lexical block *)
+  | RSYM (* register variable *)
+  | STSYM (* data-segment variable with internal linkage *)
+  | GSYM (* global variable *)
+  | LCSYM (* BSS-segment variable with internal linkage *)
+
 type symbol_type =
-  | Local of section
-  | External of section
+  | Symbol of location * section
+  | Stab of stab_type
   | Other of int
 
 type symbol =
