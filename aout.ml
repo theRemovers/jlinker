@@ -37,19 +37,22 @@ type symbol =
       symbol_value: Int32.t; 
     }
 
-type length = Byte | Word | Long
+type size = Byte | Word | Long
 
-type symbol_num = 
+type reference = 
   | Symbol of int 
-  | Type of location * section
+  | Section of section
 
 type reloc_info = 
     {
       reloc_address: int;
-      symbol_num: symbol_num;
-      pc_relative: bool;
-      length: length;
-      other_flags: int;
+      reference: reference;
+      pcrel: bool;
+      size: size;
+      baserel: bool;
+      jmptable: bool;
+      relative: bool;
+      copy: bool;
     }
 
 type object_params =
@@ -74,6 +77,10 @@ let get_machine = function
 let get_magic = function
   | 0o407l -> Some OMAGIC
   | _ -> None
+
+let string_of_location = function
+  | Local -> "local"
+  | External -> "external"
 
 let string_of_section = function
   | Undefined -> "undef"
@@ -100,8 +107,7 @@ let string_of_stab = function
 
 let string_of_symbol_type (typ:symbol_type) =
   match typ with
-  | Type (Local, section) -> Format.sprintf "local[%s]" (string_of_section section)
-  | Type (External, section) -> Format.sprintf "external[%s]" (string_of_section section)
+  | Type (location, section) -> Format.sprintf "%s[%s]" (string_of_location location) (string_of_section section)
   | Stab typ -> Format.sprintf "stab[%s]" (string_of_stab typ)
   | Other x -> Format.sprintf "other[0x%02x]" x
 
@@ -133,42 +139,51 @@ let get_symbol_type x : symbol_type =
   | 0xe0l -> Stab RBRAC
   | x -> Other (Int32.to_int x)
 
+let string_of_symbol_num = function
+  | Symbol no -> Format.sprintf "symbol(%d)" no
+  | Section section -> Format.sprintf "%s" (string_of_section section)
+
+let string_of_size = function
+  | Byte -> "byte"
+  | Word -> "word"
+  | Long -> "long"
+
+let get_size = function
+  | 0 -> Byte
+  | 1 -> Word
+  | 2 -> Long
+  | _ -> failwith "get_size"
+
 let read_reloc_info content offset =
   let reloc_address = Int32.to_int (StringExt.read_long content offset) in
   let data = StringExt.read_long content (offset + 4) in
   let flags = Int32.to_int (Int32.logand data 0xffl) in
+  let get_flag bitno = flags land (1 lsl bitno) <> 0 in
   let symbol_num = Int32.shift_right_logical data 8 in
-  let pc_relative = flags land 0x80 <> 0 in
-  let extern = flags land 0x10 = 0 in
-  let length = 
-    match (flags land 0x60) lsr 5 with
-    | 0 -> Byte
-    | 1 -> Word
-    | 2 -> Long
-    | _ -> failwith "invalid length"
-  in
-  let other_flags = flags land 0x0f in
-  let symbol_num = 
-    if extern then 
+  let pcrel = get_flag 7 in
+  let extern = get_flag 4 in
+  let size = get_size ((flags land 0x60) lsr 5) in
+  let reference = 
+    if not extern then 
       match get_symbol_type symbol_num with
-      | Type (location, section) -> Type (location, section)
+      | Type (_, section) -> Section section
       | _ -> failwith "invalid type"
     else Symbol (Int32.to_int symbol_num)
   in
+  let baserel = get_flag 3 in
+  let jmptable = get_flag 2 in
+  let relative = get_flag 1 in
+  let copy = get_flag 0 in
   {
     reloc_address;
-    symbol_num;
-    pc_relative;
-    length;
-    other_flags;
+    reference;
+    pcrel;
+    size;
+    baserel;
+    jmptable;
+    relative;
+    copy;
   }
-
-let list_init n f = 
-  let rec aux i = 
-    if i < n then (f i) :: (aux (i+1))
-    else []
-  in
-  aux 0
 
 let load_object name content =
   let mach = StringExt.read_word content 0 in
@@ -203,11 +218,13 @@ let load_object name content =
             let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
             let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
             let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-	    Printf.printf "0x%02x 0x%04x 0x%08lx %s [%s]\n" symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name;
+	    Printf.printf "%d: 0x%02x 0x%04x 0x%08lx %s [%s]\n" i symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name;
             {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value})
       in
-      let text_reloc = list_init (text_reloc_size / 8) (fun i -> read_reloc_info text_reloc (8 * i)) in
-      let data_reloc = list_init (data_reloc_size / 8) (fun i -> read_reloc_info data_reloc (8 * i)) in
+      Printf.printf "Text\n";
+      let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info text_reloc (8 * i)) in
+      Printf.printf "Data\n";
+      let data_reloc = ListExt.init (data_reloc_size / 8) (fun i -> read_reloc_info data_reloc (8 * i)) in
       Some
 	{
 	  name;

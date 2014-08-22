@@ -36,19 +36,22 @@ type symbol =
       symbol_value: Int32.t; 
     }
 
-type length = Byte | Word | Long
+type size = Byte | Word | Long
 
-type symbol_num = 
+type reference = 
   | Symbol of int 
-  | Type of location * section
+  | Section of section
 
 type reloc_info = 
     {
       reloc_address: int;
-      symbol_num: symbol_num;
-      pc_relative: bool;
-      length: length;
-      other_flags: int;
+      reference: reference;
+      pcrel: bool;
+      size: size;
+      baserel: bool;
+      jmptable: bool;
+      relative: bool;
+      copy: bool;
     }
 
 type object_params =
