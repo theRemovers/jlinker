@@ -1,1 +1,1 @@
-val choose: ('a, unit) Hashtbl.t -> 'a
+val choose: ('a, 'b) Hashtbl.t -> 'a
