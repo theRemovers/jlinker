@@ -26,15 +26,14 @@ type stab_type =
 type symbol_type =
   | Type of location * section
   | Stab of stab_type
-  | Other of int
     
 type symbol =
     { 
-      symbol_name: string;
-      symbol_type: symbol_type;
-      symbol_other: int;
-      symbol_desc: int;
-      symbol_value: Int32.t; 
+      name: string;
+      typ: symbol_type;
+      other: int;
+      desc: int;
+      value: Int32.t; 
     }
 
 type size = Byte | Word | Long
@@ -108,7 +107,6 @@ let string_of_stab = function
 let string_of_symbol_type = function
   | Type (location, section) -> Format.sprintf "%s[%s]" (string_of_location location) (string_of_section section)
   | Stab typ -> Format.sprintf "stab[%s]" (string_of_stab typ)
-  | Other x -> Format.sprintf "other[0x%02x]" x
 
 let get_symbol_type = function
   | 0l -> Type (Local, Undefined)
@@ -135,7 +133,7 @@ let get_symbol_type = function
   | 0xa0l -> Stab PSYM
   | 0xc0l -> Stab LBRAC
   | 0xe0l -> Stab RBRAC
-  | x -> Other (Int32.to_int x)
+  | x -> Format.ksprintf failwith "unknown symbol type %ld" x
 
 let string_of_reloc_base = function
   | Symbol no -> Format.sprintf "symbol(%d)" no
@@ -187,12 +185,12 @@ let read_reloc_info (content, base) offset =
 let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let offset = base_table + offset in
   let index = Int32.to_int (StringExt.read_long symbol_table offset) in
-  let symbol_name = StringExt.read_string symbol_names (base_names + index) '\000' in
-  let symbol_type = get_symbol_type (StringExt.read_byte symbol_table (offset + 4)) in
-  let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
-  let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
-  let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-  {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value}
+  let name = StringExt.read_string symbol_names (base_names + index) '\000' in
+  let typ = get_symbol_type (StringExt.read_byte symbol_table (offset + 4)) in
+  let other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
+  let desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
+  let value = StringExt.read_long symbol_table (offset + 8) in
+  {name; typ; other; desc; value}
 
 let load_object name content =
   let mach = StringExt.read_word content 0 in
@@ -230,3 +228,29 @@ let load_object name content =
           symbols;
 	}
   | _ -> None
+
+let defined_symbols {symbols; _} = 
+  let n_symbols = Array.length symbols in
+  let tbl = Hashtbl.create n_symbols in
+  for i = 0 to n_symbols do
+    let {name; typ; _} = symbols.(i) in
+    match typ with
+    | Type (External, (Text | Data | Bss | Absolute)) -> Hashtbl.replace tbl name i
+    | Type (External, Undefined)
+    | Type (Local, _) 
+    | Stab _ -> ()
+  done;
+  tbl
+
+let undefined_symbols {symbols; _} = 
+  let n_symbols = Array.length symbols in
+  let tbl = Hashtbl.create n_symbols in
+  for i = 0 to n_symbols do
+    let {name; typ; _} = symbols.(i) in
+    match typ with
+    | Type (External, Undefined) -> Hashtbl.replace tbl name i
+    | Type (External, (Text | Data | Bss | Absolute))
+    | Type (Local, _) 
+    | Stab _ -> ()
+  done;
+  tbl

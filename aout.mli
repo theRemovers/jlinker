@@ -25,15 +25,14 @@ type stab_type =
 type symbol_type =
   | Type of location * section
   | Stab of stab_type
-  | Other of int
 
 type symbol =
     { 
-      symbol_name: string;
-      symbol_type: symbol_type;
-      symbol_other: int;
-      symbol_desc: int;
-      symbol_value: Int32.t; 
+      name: string;
+      typ: symbol_type;
+      other: int;
+      desc: int;
+      value: Int32.t; 
     }
 
 type size = Byte | Word | Long
@@ -68,3 +67,6 @@ type object_params =
     }
 
 val load_object: string -> string -> object_params option
+
+val defined_symbols: object_params -> (string, int) Hashtbl.t
+val undefined_symbols: object_params -> (string, int) Hashtbl.t 
