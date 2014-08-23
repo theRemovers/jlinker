@@ -87,3 +87,19 @@ let write_byte s offset v =
   let n = Bytes.length s in
   if 0 <= offset && offset < n then Bytes.set s offset (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
   else raise (Invalid_argument "write_byte")
+
+let write_word s offset v =
+  let n = Bytes.length s in
+  if 0 <= offset && offset + 1 < n then begin
+    Bytes.set s offset (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
+    Bytes.set s (offset+1) (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
+  end else raise (Invalid_argument "write_word")
+
+let write_long s offset v =
+  let n = Bytes.length s in
+  if 0 <= offset && offset + 3 < n then begin
+    Bytes.set s offset (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 24) 0xffl)));
+    Bytes.set s (offset+1) (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 16) 0xffl)));
+    Bytes.set s (offset+2) (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
+    Bytes.set s (offset+3) (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
+  end else raise (Invalid_argument "write_long")

@@ -9,3 +9,5 @@ val read_substring: string -> int -> int -> string
 
 type bytes
 val write_byte: bytes -> int -> Int32.t -> unit
+val write_word: bytes -> int -> Int32.t -> unit
+val write_long: bytes -> int -> Int32.t -> unit
