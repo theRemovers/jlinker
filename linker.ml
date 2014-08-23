@@ -112,101 +112,20 @@ let mk_spec () =
    "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
   ]
 
-type symbol =
-    { symbol_name: string;
-      symbol_type: Int32.t;
-      symbol_value: Int32.t; }
-
-type object_params =
-    { filename: string;
-      text_section: string;
-      data_section: string;
-      bss_section_size: int;
-      text_reloc: string;
-      data_reloc: string;
-      symbols: symbol array;
-      global_symbols: (string, Int32.t * Int32.t) Hashtbl.t;
-      global_undefined: (string, unit) Hashtbl.t; }
-
 type 'a obj_kind =
   | Object of 'a
   | Archive of 'a Archive.t
 
 let rec display_obj = function
-  | Object {filename; _} ->
-      Log.message "OBJ - %s" filename
+  | Object {Aout.name; _} ->
+      Log.message "OBJ - %s" name
   | Archive {Archive.filename; content} ->
       Log.message "ARCHIVE - %s" filename;
       Array.iter (function {Archive.filename; data; _} -> display_obj (Object data)) content
 
-let t_global_mask = 0x01000000l
-
-let load_object filename content =
-  let _ = Aout.load_object filename content in
-  let magic = StringExt.read_long content 0 in
-  match magic with
-  | 0x0000107l
-  | 0x0020107l ->
-      let text_size = Int32.to_int (StringExt.read_long content 4) in
-      let data_size = Int32.to_int (StringExt.read_long content 8) in
-      let bss_section_size = Int32.to_int (StringExt.read_long content 12) in
-      let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
-      let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
-      let sym_size = Int32.to_int (StringExt.read_long content 16) in
-      let offset = 32 in
-      let text_section = StringExt.read_substring content offset text_size in
-      let offset = offset + text_size in
-      let data_section = StringExt.read_substring content offset data_size in
-      let offset = offset + data_size in
-      let text_reloc = StringExt.read_substring content offset text_reloc_size in
-      let offset = offset + text_reloc_size in
-      let data_reloc = StringExt.read_substring content offset data_reloc_size in
-      let offset = offset + data_reloc_size in
-      let symbol_table = StringExt.read_substring content offset sym_size in
-      let offset = offset + sym_size in
-      let symbol_names = StringExt.read_substring content offset (String.length content - offset) in
-      let symbols =
-        Array.init (sym_size / 12)
-          (fun i ->
-            let offset = i * 12 in
-            let index = Int32.to_int (StringExt.read_long symbol_table offset) in
-            let symbol_name = StringExt.read_string symbol_names index '\000' in
-            let symbol_type = StringExt.read_long symbol_table (offset + 4) in
-            let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-            {symbol_name; symbol_type; symbol_value})
-      in
-      let global_symbols = Hashtbl.create 16 in
-      let global_undefined = Hashtbl.create 16 in
-      let f {symbol_name; symbol_type; symbol_value} =
-        let warn () =
-          if Hashtbl.mem global_symbols symbol_name || Hashtbl.mem global_undefined symbol_name then
-            Log.warning "Duplicated symbol %s in object file %s" symbol_name filename;
-        in
-        if Int32.logand symbol_type t_global_mask = 0l then ()
-        else if symbol_type = t_global_mask && symbol_value = 0l then begin
-          warn ();
-          Hashtbl.replace global_undefined symbol_name ()
-        end else begin
-          warn ();
-          Hashtbl.replace global_symbols symbol_name (symbol_type, symbol_value)
-        end
-      in
-      Array.iter f symbols;
-      Some
-        { filename;
-          text_section;
-          data_section;
-          bss_section_size;
-          text_reloc;
-          data_reloc;
-          symbols;
-          global_symbols;
-          global_undefined; }
-  | _ -> None
-
 let load_archive archname content =
   let f ({Archive.filename; data; _} as file) =
-    match load_object filename data with
+    match Aout.load_object filename data with
     | None -> ffailwith "unsupported file in archive %s" archname
     | Some obj -> {file with Archive.data = obj}
   in
@@ -214,18 +133,10 @@ let load_archive archname content =
   | None -> None
   | Some archive -> Some (Archive.map f archive)
 
-let rec list_choose f = function
-  | [] -> []
-  | x :: xs ->
-      begin match f x with
-      | None -> list_choose f xs
-      | Some y -> y :: list_choose f xs
-      end
-
 let process_file = function
   | Object_or_archive filename ->
       let content = FileExt.load filename in
-      begin match load_object filename content with
+      begin match Aout.load_object filename content with
       | None ->
           begin match load_archive filename content with
           | None -> ffailwith "Cannot read file %s (unknown type)" filename
@@ -235,19 +146,7 @@ let process_file = function
       end
   | Binary (symbol, filename) -> failwith "todo"
 
-exception Exit
-
-let hashtbl_choose tbl =
-  if Hashtbl.length tbl = 0 then raise Not_found
-  else begin
-    let result = ref None in
-    try Hashtbl.iter (fun x () -> result := Some x; raise Exit) tbl; assert false
-    with Exit ->
-      match !result with
-      | None -> assert false
-      | Some x -> x
-  end
-
+(*
 let defined_by_linker = ["_BSS_E"]
 
 let solve problem =
@@ -322,14 +221,16 @@ let solve problem =
   done;
   Hashtbl.iter (fun sym_name b -> if not b then Printf.printf "%s is unresolved\n" sym_name) def_tbl;
   get_objects problem
+ *)
 
 let main () =
   try
     init_lib_directories();
     Arg.parse (mk_spec()) do_file info_string;
     let objects = List.map process_file (get_files()) in
-    let solution = solve objects in
-    List.iter (function {filename; _} -> Printf.printf "Keeping %s\n" filename) solution
+    ignore objects
+    (* let solution = solve objects in *)
+    (* List.iter (function {filename; _} -> Printf.printf "Keeping %s\n" filename) solution *)
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)

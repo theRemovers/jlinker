@@ -38,14 +38,14 @@ type symbol =
 
 type size = Byte | Word | Long
 
-type reference = 
+type reloc_base = 
   | Symbol of int 
   | Section of section
 
 type reloc_info = 
     {
       reloc_address: int;
-      reference: reference;
+      reloc_base: reloc_base;
       pcrel: bool;
       size: size;
       baserel: bool;

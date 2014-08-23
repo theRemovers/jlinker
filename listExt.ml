@@ -4,3 +4,11 @@ let init n f =
     else []
   in
   aux 0
+
+let rec choose f = function
+  | [] -> []
+  | x :: xs ->
+     begin match f x with
+     | None -> choose f xs
+     | Some y -> y :: (choose f xs)
+     end

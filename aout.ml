@@ -39,14 +39,14 @@ type symbol =
 
 type size = Byte | Word | Long
 
-type reference = 
+type reloc_base = 
   | Symbol of int 
   | Section of section
 
 type reloc_info = 
     {
       reloc_address: int;
-      reference: reference;
+      reloc_base: reloc_base;
       pcrel: bool;
       size: size;
       baserel: bool;
@@ -139,7 +139,7 @@ let get_symbol_type x : symbol_type =
   | 0xe0l -> Stab RBRAC
   | x -> Other (Int32.to_int x)
 
-let string_of_symbol_num = function
+let string_of_reloc_base = function
   | Symbol no -> Format.sprintf "symbol(%d)" no
   | Section section -> Format.sprintf "%s" (string_of_section section)
 
@@ -154,21 +154,22 @@ let get_size = function
   | 2 -> Long
   | _ -> failwith "get_size"
 
-let read_reloc_info content offset =
+let read_reloc_info (content, base) offset =
+  let offset = base + offset in
   let reloc_address = Int32.to_int (StringExt.read_long content offset) in
   let data = StringExt.read_long content (offset + 4) in
   let flags = Int32.to_int (Int32.logand data 0xffl) in
   let get_flag bitno = flags land (1 lsl bitno) <> 0 in
-  let symbol_num = Int32.shift_right_logical data 8 in
+  let reloc_base = Int32.shift_right_logical data 8 in
   let pcrel = get_flag 7 in
   let extern = get_flag 4 in
   let size = get_size ((flags land 0x60) lsr 5) in
-  let reference = 
+  let reloc_base = 
     if not extern then 
-      match get_symbol_type symbol_num with
+      match get_symbol_type reloc_base with
       | Type (_, section) -> Section section
       | _ -> failwith "invalid type"
-    else Symbol (Int32.to_int symbol_num)
+    else Symbol (Int32.to_int reloc_base)
   in
   let baserel = get_flag 3 in
   let jmptable = get_flag 2 in
@@ -176,7 +177,7 @@ let read_reloc_info content offset =
   let copy = get_flag 0 in
   {
     reloc_address;
-    reference;
+    reloc_base;
     pcrel;
     size;
     baserel;
@@ -184,6 +185,16 @@ let read_reloc_info content offset =
     relative;
     copy;
   }
+
+let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
+  let offset = base_table + offset in
+  let index = Int32.to_int (StringExt.read_long symbol_table offset) in
+  let symbol_name = StringExt.read_string symbol_names (base_names + index) '\000' in
+  let symbol_type = get_symbol_type (StringExt.read_byte symbol_table (offset + 4)) in
+  let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
+  let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
+  let symbol_value = StringExt.read_long symbol_table (offset + 8) in
+  {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value}
 
 let load_object name content =
   let mach = StringExt.read_word content 0 in
@@ -201,30 +212,13 @@ let load_object name content =
       let offset = offset + text_size in
       let data_section = StringExt.read_substring content offset data_size in
       let offset = offset + data_size in
-      let text_reloc = StringExt.read_substring content offset text_reloc_size in
+      let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
       let offset = offset + text_reloc_size in
-      let data_reloc = StringExt.read_substring content offset data_reloc_size in
+      let data_reloc = ListExt.init (data_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
       let offset = offset + data_reloc_size in
-      let symbol_table = StringExt.read_substring content offset sym_size in
+      let base_tbl = offset in
       let offset = offset + sym_size in
-      let symbol_names = StringExt.read_substring content offset (String.length content - offset) in
-      let symbols =
-        Array.init (sym_size / 12)
-          (fun i ->
-            let offset = i * 12 in
-            let index = Int32.to_int (StringExt.read_long symbol_table offset) in
-            let symbol_name = StringExt.read_string symbol_names index '\000' in
-            let symbol_type = get_symbol_type (StringExt.read_byte symbol_table (offset + 4)) in
-            let symbol_other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
-            let symbol_desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
-            let symbol_value = StringExt.read_long symbol_table (offset + 8) in
-	    Printf.printf "%d: 0x%02x 0x%04x 0x%08lx %s [%s]\n" i symbol_other symbol_desc symbol_value (string_of_symbol_type symbol_type) symbol_name;
-            {symbol_name; symbol_type; symbol_other; symbol_desc; symbol_value})
-      in
-      Printf.printf "Text\n";
-      let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info text_reloc (8 * i)) in
-      Printf.printf "Data\n";
-      let data_reloc = ListExt.init (data_reloc_size / 8) (fun i -> read_reloc_info data_reloc (8 * i)) in
+      let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
       Some
 	{
 	  name;
