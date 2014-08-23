@@ -233,30 +233,18 @@ let filter_symbols p {symbols; _} =
   let n_symbols = Array.length symbols in
   let tbl = Hashtbl.create n_symbols in
   for i = 0 to n_symbols - 1 do
-    if p symbols.(i) then begin
-      let name = symbols.(i).name in
-      assert (not (Hashtbl.mem tbl name));
-      Hashtbl.replace tbl name i;
-    end
+    if p symbols.(i) then Hashtbl.replace tbl i ()
   done;
   tbl
 
-let defined_symbols obj = 
-  let p {typ; _} = 
-    match typ with
-    | Type (External, (Text | Data | Bss | Absolute)) -> true
-    | Type (External, Undefined)
-    | Type (Local, _) 
-    | Stab _ -> false
-  in
-  filter_symbols p obj
+let is_global_symbol {typ; _} = 
+  match typ with
+  | Type (External, _) -> true
+  | Type (Local, _) 
+  | Stab _ -> false
 
-let undefined_symbols obj = 
-  let p {typ; _} = 
-    match typ with
-    | Type (External, Undefined) -> true
-    | Type (External, (Text | Data | Bss | Absolute)) 
-    | Type (Local, _) 
-    | Stab _ -> false
-  in
-  filter_symbols p obj
+let is_undefined_symbol {typ; _} = 
+  match typ with
+  | Type (_, Undefined) -> true
+  | Type (_, (Text | Data | Bss | Absolute)) 
+  | Stab _ -> false

@@ -68,5 +68,7 @@ type object_params =
 
 val load_object: string -> string -> object_params option
 
-val defined_symbols: object_params -> (string, int) Hashtbl.t
-val undefined_symbols: object_params -> (string, int) Hashtbl.t 
+val filter_symbols: (symbol -> bool) -> object_params -> (int, unit) Hashtbl.t
+
+val is_global_symbol: symbol -> bool
+val is_undefined_symbol: symbol -> bool
