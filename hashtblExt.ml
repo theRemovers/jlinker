@@ -10,7 +10,3 @@ let choose tbl =
       | None -> assert false
       | Some x -> x
   end
-
-let add_new tbl key value = 
-  if Hashtbl.mem tbl key then ()
-  else Hashtbl.add tbl key value
