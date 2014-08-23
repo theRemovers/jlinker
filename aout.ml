@@ -105,14 +105,12 @@ let string_of_stab = function
   | GSYM -> "GSYM"
   | LCSYM -> "LCSYM"
 
-let string_of_symbol_type (typ:symbol_type) =
-  match typ with
+let string_of_symbol_type = function
   | Type (location, section) -> Format.sprintf "%s[%s]" (string_of_location location) (string_of_section section)
   | Stab typ -> Format.sprintf "stab[%s]" (string_of_stab typ)
   | Other x -> Format.sprintf "other[0x%02x]" x
 
-let get_symbol_type x : symbol_type =
-  match x with
+let get_symbol_type = function
   | 0l -> Type (Local, Undefined)
   | 1l -> Type (External, Undefined)
   | 2l -> Type (Local, Absolute)
