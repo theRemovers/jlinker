@@ -229,28 +229,34 @@ let load_object name content =
 	}
   | _ -> None
 
-let defined_symbols {symbols; _} = 
+let filter_symbols p {symbols; _} = 
   let n_symbols = Array.length symbols in
   let tbl = Hashtbl.create n_symbols in
-  for i = 0 to n_symbols do
-    let {name; typ; _} = symbols.(i) in
-    match typ with
-    | Type (External, (Text | Data | Bss | Absolute)) -> Hashtbl.replace tbl name i
-    | Type (External, Undefined)
-    | Type (Local, _) 
-    | Stab _ -> ()
+  for i = 0 to n_symbols - 1 do
+    if p symbols.(i) then begin
+      let name = symbols.(i).name in
+      assert (not (Hashtbl.mem tbl name));
+      Hashtbl.replace tbl name i;
+    end
   done;
   tbl
 
-let undefined_symbols {symbols; _} = 
-  let n_symbols = Array.length symbols in
-  let tbl = Hashtbl.create n_symbols in
-  for i = 0 to n_symbols do
-    let {name; typ; _} = symbols.(i) in
+let defined_symbols obj = 
+  let p {typ; _} = 
     match typ with
-    | Type (External, Undefined) -> Hashtbl.replace tbl name i
-    | Type (External, (Text | Data | Bss | Absolute))
+    | Type (External, (Text | Data | Bss | Absolute)) -> true
+    | Type (External, Undefined)
     | Type (Local, _) 
-    | Stab _ -> ()
-  done;
-  tbl
+    | Stab _ -> false
+  in
+  filter_symbols p obj
+
+let undefined_symbols obj = 
+  let p {typ; _} = 
+    match typ with
+    | Type (External, Undefined) -> true
+    | Type (External, (Text | Data | Bss | Absolute)) 
+    | Type (Local, _) 
+    | Stab _ -> false
+  in
+  filter_symbols p obj
