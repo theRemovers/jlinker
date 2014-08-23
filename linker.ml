@@ -146,6 +146,50 @@ let process_file = function
       end
   | Binary (symbol, filename) -> failwith "todo"
 
+let get_summary problem = 
+  let process_obj {Aout.symbols; filename; _} = 
+    let defined = Hashtbl.create 16 in
+    let undefined = Hashtbl.create 16 in
+    let add_defined name =
+      assert (not (Hashtbl.mem undefined name));
+      if Hashtbl.mem defined name then Log.warning "Symbol %s is ambiguous in object %s" name filename
+      else Hashtbl.add defined name ()
+    in
+    let add_undefined name = 
+      assert (not (Hashtbl.mem defined name));
+      if Hashtbl.mem undefined name then Log.warning "Symbol %s is ambiguous in object %s" name filename
+      else Hashtbl.add undefined name ()
+    in
+    let open Aout in
+    let f {name; typ; _} =
+      match typ with
+      | Type (External, (Text | Data | Bss | Absolute)) -> add_defined name
+      | Type (External, Undefined) -> add_undefined name
+      | Type (Local, _)
+      | Stab _ -> ()
+    in
+    Array.iter f symbols;
+    defined, undefined
+  in
+  let f = function
+    | Object obj -> `Object (process_obj obj)
+    | Archive {Archive.content; filename; _} -> 
+       let open Archive in
+       let n_obj = Array.length content in
+       let summary = Array.map (fun {data; _} -> process_obj data) content in
+       let defined = Hashtbl.create n_obj in
+       let add_defined name no = 
+	 if Hashtbl.mem defined name then Log.warning "Symbol %s is multiply defined in archive %s" name filename
+	 else Hashtbl.add defined name no
+       in
+       for i = 0 to n_obj-1 do
+	 let def_i, _ = summary.(i) in
+	 Hashtbl.iter (fun name () -> add_defined name i) def_i;
+       done;
+       `Archive (defined, summary)
+  in
+  Array.map f problem
+
 (*
 let defined_by_linker = ["_BSS_E"]
 
@@ -227,9 +271,9 @@ let main () =
   try
     init_lib_directories();
     Arg.parse (mk_spec()) do_file info_string;
-    let objects = List.map process_file (get_files()) in
-    ignore objects
-    (* let solution = solve objects in *)
+    let objects = Array.of_list (List.map process_file (get_files())) in
+    let summary = get_summary objects in
+    ignore summary
     (* List.iter (function {filename; _} -> Printf.printf "Keeping %s\n" filename) solution *)
   with
   | Failure msg -> Log.error msg

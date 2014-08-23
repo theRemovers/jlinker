@@ -56,7 +56,7 @@ type reloc_info =
 
 type object_params =
     { 
-      name: string;
+      filename: string;
       machine: machine;
       magic: magic;
       text_section: string;
@@ -192,7 +192,7 @@ let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let value = StringExt.read_long symbol_table (offset + 8) in
   {name; typ; other; desc; value}
 
-let load_object name content =
+let load_object filename content =
   let mach = StringExt.read_word content 0 in
   let magic = StringExt.read_word content 2 in
   match get_machine mach, get_magic magic with
@@ -217,7 +217,7 @@ let load_object name content =
       let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
       Some
 	{
-	  name;
+	  filename;
 	  machine;
 	  magic;
           text_section;
@@ -228,23 +228,3 @@ let load_object name content =
           symbols;
 	}
   | _ -> None
-
-let filter_symbols p {symbols; _} = 
-  let n_symbols = Array.length symbols in
-  let tbl = Hashtbl.create n_symbols in
-  for i = 0 to n_symbols - 1 do
-    if p symbols.(i) then Hashtbl.replace tbl i ()
-  done;
-  tbl
-
-let is_global_symbol {typ; _} = 
-  match typ with
-  | Type (External, _) -> true
-  | Type (Local, _) 
-  | Stab _ -> false
-
-let is_undefined_symbol {typ; _} = 
-  match typ with
-  | Type (_, Undefined) -> true
-  | Type (_, (Text | Data | Bss | Absolute)) 
-  | Stab _ -> false

@@ -55,7 +55,7 @@ type reloc_info =
 
 type object_params =
     { 
-      name: string;
+      filename: string;
       machine: machine;
       magic: magic;
       text_section: string;
@@ -67,8 +67,3 @@ type object_params =
     }
 
 val load_object: string -> string -> object_params option
-
-val filter_symbols: (symbol -> bool) -> object_params -> (int, unit) Hashtbl.t
-
-val is_global_symbol: symbol -> bool
-val is_undefined_symbol: symbol -> bool
