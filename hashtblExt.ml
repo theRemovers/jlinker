@@ -10,3 +10,8 @@ let choose tbl =
       | None -> assert false
       | Some x -> x
   end
+
+let keys tbl = 
+  let l = ref [] in
+  Hashtbl.iter (fun x _ -> l := x :: !l) tbl;
+  !l

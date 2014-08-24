@@ -146,6 +146,16 @@ let process_file = function
       end
   | Binary (symbol, filename) -> failwith "todo"
 
+let build_index ?(warn = fun _ -> ()) summary = 
+  let index = Hashtbl.create 16 in
+  let add_index sym_name no = 
+    if Hashtbl.mem index sym_name then warn sym_name
+    else Hashtbl.add index sym_name no
+  in
+  let f i (def_i, _undef_i) = Hashtbl.iter (fun name _ -> add_index name i) def_i in
+  Array.iteri f summary;
+  index
+
 let get_summary problem = 
   let process_obj {Aout.symbols; filename; _} = 
     let defined = Hashtbl.create 16 in
@@ -176,18 +186,10 @@ let get_summary problem =
     | Object obj -> `Object (process_obj obj)
     | Archive {Archive.content; filename; _} -> 
        let open Archive in
-       let n_obj = Array.length content in
        let summary = Array.map (fun {data; _} -> process_obj data) content in
-       let defined = Hashtbl.create n_obj in
-       let add_defined name no = 
-	 if Hashtbl.mem defined name then Log.warning "Symbol %s is multiply defined in archive %s" name filename
-	 else Hashtbl.add defined name no
-       in
-       for i = 0 to n_obj-1 do
-	 let def_i, _ = summary.(i) in
-	 Hashtbl.iter (fun name _ -> add_defined name i) def_i;
-       done;
-       `Archive (defined, summary)
+       let warn sym_name = Log.warning "Symbol %s multiply defined in archive %s" sym_name filename in
+       let index = build_index ~warn summary in
+       `Archive (index, summary)
   in
   Array.map f problem
 
@@ -195,7 +197,6 @@ let solve problem =
   let undefined_tbl = Hashtbl.create 16 in
   let defined_tbl = Hashtbl.create 16 in
   let unresolved_tbl = Hashtbl.create 16 in
-  let is_defined sym_name = Hashtbl.mem defined_tbl sym_name || Hashtbl.mem unresolved_tbl sym_name in
   let mark_defined sym_name =
     assert (not (Hashtbl.mem unresolved_tbl sym_name));
     if Hashtbl.mem defined_tbl sym_name then begin
@@ -210,7 +211,7 @@ let solve problem =
     Hashtbl.replace unresolved_tbl sym_name ()
   in
   let mark_undefined sym_name =
-    if is_defined sym_name then ()
+    if Hashtbl.mem defined_tbl sym_name || Hashtbl.mem unresolved_tbl sym_name then ()
     else Hashtbl.replace undefined_tbl sym_name ()
   in
   let add_object (defined, undefined) =
@@ -255,7 +256,7 @@ let solve problem =
       add_object obj
     with Not_found -> mark_unresolved sym_name
   done;
-  let solution = 
+  let solution_and_summary = 
     let n = Array.length problem in
     let rec aux i =
       if i < n then begin
@@ -278,23 +279,40 @@ let solve problem =
 	| Archive _, `Object _ -> assert false
       end else []
     in
-    aux 0
+    Array.of_list (aux 0)
   in
-  let unresolved = 
-    let l = ref [] in
-    Hashtbl.iter (fun sym_name () -> l := sym_name :: !l) unresolved_tbl;
-    !l
+  let solution = Array.map fst solution_and_summary in
+  let summary = Array.map snd solution_and_summary in
+  let index = build_index summary in
+  let unresolved_symbols =
+    let f i (_def_i, undef_i) unresolved_symbols = 
+      let {Aout.symbols; _} = solution.(i) in
+      let rec update_unresolved = function
+	| [] -> []
+	| ((sym_name, current_value) as sym) :: tl ->
+	   try 
+	     let sym_no = Hashtbl.find undef_i sym_name in
+	     let {Aout.typ; value; _} = symbols.(sym_no) in
+	     assert (typ = Aout.(Type (External, Undefined)));
+	     (sym_name, max current_value value) :: (update_unresolved tl)
+	   with Not_found -> sym :: (update_unresolved tl)
+      in
+      update_unresolved unresolved_symbols
+    in
+    let symbols = ref (List.map (fun sym_name -> sym_name, 0l) (HashtblExt.keys unresolved_tbl)) in
+    Array.iteri (fun i obj -> symbols := f i obj !symbols) summary;
+    !symbols
   in
-  solution, unresolved
+  index, solution, unresolved_symbols
 
 let main () =
   try
     init_lib_directories();
     Arg.parse (mk_spec()) do_file info_string;
     let objects = Array.of_list (List.map process_file (get_files())) in
-    let solution, unresolved = solve objects in
-    List.iter (function ({Aout.filename; _}, _) -> Printf.printf "Keeping %s\n" filename) solution;
-    List.iter (function sym_name -> Printf.printf "Symbol %s is unresolved\n" sym_name) unresolved
+    let index, solution, unresolved_symbols = solve objects in
+    Array.iter (function {Aout.filename; _} -> Printf.printf "Keeping %s\n" filename) solution;
+    List.iter (function (sym_name, value) -> Printf.printf "Symbol %s [%ld] is unresolved\n" sym_name value) unresolved_symbols
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)
