@@ -191,91 +191,110 @@ let get_summary problem =
   in
   Array.map f problem
 
-(*
-let defined_by_linker = ["_BSS_E"]
-
 let solve problem =
-  let undef_tbl = Hashtbl.create 16 in
-  let def_tbl = Hashtbl.create 16 in
-  let is_defined sym_name = Hashtbl.mem def_tbl sym_name in
+  let undefined_tbl = Hashtbl.create 16 in
+  let defined_tbl = Hashtbl.create 16 in
+  let unresolved_tbl = Hashtbl.create 16 in
+  let is_defined sym_name = Hashtbl.mem defined_tbl sym_name || Hashtbl.mem unresolved_tbl sym_name in
   let mark_defined sym_name =
-    if Hashtbl.mem def_tbl sym_name then begin
+    assert (not (Hashtbl.mem unresolved_tbl sym_name));
+    if Hashtbl.mem defined_tbl sym_name then begin
       Log.warning "Symbol %s is defined several times" sym_name;
-      assert (Hashtbl.find def_tbl sym_name)
     end;
-    Hashtbl.remove undef_tbl sym_name;
-    Hashtbl.replace def_tbl sym_name true
+    Hashtbl.remove undefined_tbl sym_name;
+    Hashtbl.replace defined_tbl sym_name ()
   in
   let mark_unresolved sym_name =
-    assert (not (Hashtbl.mem def_tbl sym_name));
-    Hashtbl.remove undef_tbl sym_name;
-    Hashtbl.replace def_tbl sym_name false
+    assert (not (Hashtbl.mem defined_tbl sym_name));
+    Hashtbl.remove undefined_tbl sym_name;
+    Hashtbl.replace unresolved_tbl sym_name ()
   in
   let mark_undefined sym_name =
     if is_defined sym_name then ()
-    else Hashtbl.replace undef_tbl sym_name ()
+    else Hashtbl.replace undefined_tbl sym_name ()
   in
-  List.iter mark_defined defined_by_linker;
-  let add_object {global_undefined; global_symbols; _} =
-    Hashtbl.iter (fun sym_name _ -> mark_defined sym_name) global_symbols;
-    Hashtbl.iter (fun sym_name _ -> mark_undefined sym_name) global_undefined
+  let add_object (defined, undefined) =
+    Hashtbl.iter (fun sym_name _ -> mark_defined sym_name) defined;
+    Hashtbl.iter (fun sym_name _ -> mark_undefined sym_name) undefined
   in
-  let problem =
-    let f = function
-      | Object obj -> add_object obj; Object (true, obj)
-      | Archive archive -> Archive (Archive.map_data (fun obj -> false, obj) archive)
+  let summary = get_summary problem in
+  let archives = 
+    let n = Array.length summary in
+    let rec aux i = 
+      if i < n then begin
+	match summary.(i) with
+	| `Object obj -> add_object obj; aux (i+1)
+	| `Archive _ -> i :: (aux (i+1))
+      end else []
     in
-    List.map f problem
+    aux 0
   in
-  let update_archive sym_name {Archive.content; _} =
-    let n = Array.length content in
-    let rec aux i =
-      if i < n then
-        let ({Archive.data = (selected, ({global_symbols; _} as obj))} as file) = content.(i) in
-        if not selected && Hashtbl.mem global_symbols sym_name then
-          let new_file = {file with Archive.data = (true, obj)} in
-          content.(i) <- new_file;
-          obj
-        else aux (i+1)
-      else raise Not_found
+  let find_symbol sym_name =
+    let rec aux = function
+      | [] -> raise Not_found
+      | archno :: tl ->
+	 begin match summary.(archno) with
+	 | `Object _ -> assert false
+	 | `Archive (def, objs) ->
+	    try 
+	      let no = Hashtbl.find def sym_name in
+	      archno, no, objs.(no)
+	    with Not_found -> aux tl
+	 end
     in
-    let obj = aux 0 in
-    obj
+    aux archives
   in
-  let rec update_problem sym_name = function
-    | [] -> raise Not_found
-    | (Object _) :: xs -> update_problem sym_name xs
-    | (Archive archive) :: xs ->
-        begin try update_archive sym_name archive
-        with Not_found -> update_problem sym_name xs
-        end
-  in
-  let rec get_objects = function
-    | [] -> []
-    | Object (b, obj) :: tl -> if b then obj :: get_objects tl else get_objects tl
-    | Archive {Archive.content; filename = archname} :: tl ->
-        let objs = get_objects (Array.to_list (Array.map (function {Archive.data; _} -> Object data) content)) in
-        let fullname name = archname ^ "/" ^ name in
-        let objs = List.map (function ({filename; _} as obj) -> {obj with filename = fullname filename}) objs in
-        objs @ get_objects tl
-  in
-  while Hashtbl.length undef_tbl > 0 do
-    let sym_name = hashtbl_choose undef_tbl in
-    try add_object (update_problem sym_name problem)
+  let selected_tbl = Hashtbl.create 16 in
+  while Hashtbl.length undefined_tbl > 0 do
+    let sym_name = HashtblExt.choose undefined_tbl in
+    try
+      let archno, objno, obj = find_symbol sym_name in
+      let idx = archno, objno in
+      assert (not (Hashtbl.mem selected_tbl idx));
+      Hashtbl.replace selected_tbl idx ();
+      add_object obj
     with Not_found -> mark_unresolved sym_name
   done;
-  Hashtbl.iter (fun sym_name b -> if not b then Printf.printf "%s is unresolved\n" sym_name) def_tbl;
-  get_objects problem
- *)
+  let solution = 
+    let n = Array.length problem in
+    let rec aux i =
+      if i < n then begin
+        match problem.(i), summary.(i) with
+	| Object obj, `Object obj_sum -> (obj, obj_sum) :: aux (i+1)
+	| Archive {Archive.filename; content; _}, `Archive (_, objs_sum) ->
+	   let n_objs = Array.length content in
+	   let rec extract j =
+	     if j < n_objs then begin
+	       let idx = i, j in
+	       if Hashtbl.mem selected_tbl idx then
+		 let obj = content.(j).Archive.data in
+		 let obj_sum = objs_sum.(j) in
+		 ({obj with Aout.filename = filename ^ "/" ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
+	       else extract (j+1)
+	     end else []
+	   in
+	   (extract 0) @ (aux (i+1))
+	| Object _, `Archive _
+	| Archive _, `Object _ -> assert false
+      end else []
+    in
+    aux 0
+  in
+  let unresolved = 
+    let l = ref [] in
+    Hashtbl.iter (fun sym_name () -> l := sym_name :: !l) unresolved_tbl;
+    !l
+  in
+  solution, unresolved
 
 let main () =
   try
     init_lib_directories();
     Arg.parse (mk_spec()) do_file info_string;
     let objects = Array.of_list (List.map process_file (get_files())) in
-    let summary = get_summary objects in
-    ignore summary
-    (* List.iter (function {filename; _} -> Printf.printf "Keeping %s\n" filename) solution *)
+    let solution, unresolved = solve objects in
+    List.iter (function ({Aout.filename; _}, _) -> Printf.printf "Keeping %s\n" filename) solution;
+    List.iter (function sym_name -> Printf.printf "Symbol %s is unresolved\n" sym_name) unresolved
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)
