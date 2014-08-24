@@ -165,6 +165,7 @@ let get_summary problem =
       match typ with
       | Type (External, (Text | Data | Bss | Absolute)) -> add_defined name no
       | Type (External, Undefined) -> add_undefined name no
+      | Type (Local, Undefined) -> assert false
       | Type (Local, _)
       | Stab _ -> ()
     in
