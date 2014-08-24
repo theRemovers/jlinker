@@ -150,25 +150,25 @@ let get_summary problem =
   let process_obj {Aout.symbols; filename; _} = 
     let defined = Hashtbl.create 16 in
     let undefined = Hashtbl.create 16 in
-    let add_defined name =
+    let add_defined name no =
       assert (not (Hashtbl.mem undefined name));
       if Hashtbl.mem defined name then Log.warning "Symbol %s is ambiguous in object %s" name filename
-      else Hashtbl.add defined name ()
+      else Hashtbl.add defined name no
     in
-    let add_undefined name = 
+    let add_undefined name no = 
       assert (not (Hashtbl.mem defined name));
       if Hashtbl.mem undefined name then Log.warning "Symbol %s is ambiguous in object %s" name filename
-      else Hashtbl.add undefined name ()
+      else Hashtbl.add undefined name no
     in
     let open Aout in
-    let f {name; typ; _} =
+    let f no {name; typ; _} =
       match typ with
-      | Type (External, (Text | Data | Bss | Absolute)) -> add_defined name
-      | Type (External, Undefined) -> add_undefined name
+      | Type (External, (Text | Data | Bss | Absolute)) -> add_defined name no
+      | Type (External, Undefined) -> add_undefined name no
       | Type (Local, _)
       | Stab _ -> ()
     in
-    Array.iter f symbols;
+    Array.iteri f symbols;
     defined, undefined
   in
   let f = function
@@ -184,7 +184,7 @@ let get_summary problem =
        in
        for i = 0 to n_obj-1 do
 	 let def_i, _ = summary.(i) in
-	 Hashtbl.iter (fun name () -> add_defined name i) def_i;
+	 Hashtbl.iter (fun name _ -> add_defined name i) def_i;
        done;
        `Archive (defined, summary)
   in
