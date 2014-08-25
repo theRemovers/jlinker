@@ -12,7 +12,8 @@ VERSION=0.0.1
 SRCMLI=fileExt.mli stringExt.mli listExt.mli hashtblExt.mli 
 SRCMLI+=archive.mli aout.mli log.mli problem.mli
 SRCML=fileExt.ml stringExt.ml listExt.ml hashtblExt.ml
-SRCML+=version.ml archive.ml aout.ml log.ml problem.ml linker.ml
+SRCML+=version.ml archive.ml aout.ml log.ml problem.ml
+SRCML+=main.ml
 
 SRCS=$(SRCML) $(SRCMLI)
 
