@@ -72,10 +72,18 @@ let get_machine = function
   | 1l -> Some M68010
   | 2l -> Some M68020
   | _ -> None
-  
+
+let val_of_machine = function
+  | M68000 -> 0l
+  | M68010 -> 1l
+  | M68020 -> 2l
+
 let get_magic = function
   | 0o407l -> Some OMAGIC
   | _ -> None
+
+let val_of_magic = function
+  | OMAGIC -> 0o407l
 
 let string_of_location = function
   | Local -> "local"
@@ -239,3 +247,22 @@ let load_object filename content =
           symbols;
 	}
   | _ -> None
+
+let emit_byte oc v = 
+  output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
+
+let emit_word oc v = 
+  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
+  output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
+
+let emit_long oc v = 
+  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 24) 0xffl)));
+  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 16) 0xffl)));
+  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
+  output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
+
+let save_object filename {machine; magic; text; data; bss_size; symbols; text_reloc; data_reloc} = 
+  let oc = open_out_bin filename in
+  emit_word oc (val_of_machine machine);
+  emit_word oc (val_of_magic magic);
+  close_out oc
