@@ -33,14 +33,19 @@ class section padding =
     method content = Bytes.of_string (Buffer.contents buf)
   end
 
+let swap_words v = 
+  let low = Int32.logand v 0xffffl in
+  let high = Int32.logand (Int32.shift_right_logical v 16) 0xffffl in
+  Int32.logor (Int32.shift_left low 16) high
+
 let link padding (objects, index, unresolved_symbols) = 
   let objects = Array.map (fun obj -> obj, Aout.build_index obj.Aout.symbols) objects in
   let text_section = new section padding in
   let data_section = new section padding in
   let bss_offset = ref 0 in
-  let offsets = Array.map (fun _ -> 0, 0, 0) objects in
+  let offsets = Array.map (fun _ -> 0l, 0l, 0l) objects in
   let add_object i ({Aout.text; data; bss_size; filename; _}, _) = 
-    offsets.(i) <- text_section # offset, data_section # offset, !bss_offset;
+    offsets.(i) <- Int32.of_int (text_section # offset), Int32.of_int (data_section # offset), Int32.of_int !bss_offset;
     Printf.printf "%s: 0x%08x 0x%08x 0x%08x\n" filename (text_section # offset) (data_section # offset) !bss_offset;
     text_section # add_content text;
     data_section # add_content data;
@@ -49,6 +54,7 @@ let link padding (objects, index, unresolved_symbols) =
   Array.iteri add_object objects;
   let text = text_section # content in
   let data = data_section # content in
+  let bss_size = !bss_offset in
   let new_symbols = 
     let f (name, value) = 
       let open Aout in
@@ -62,20 +68,30 @@ let link padding (objects, index, unresolved_symbols) =
     Array.of_list (List.map f unresolved_symbols)
   in
   let new_symbols_index = Aout.build_index new_symbols in
+  let get_symbol_section_value sym_name =
+    let open Aout in
+    let objno = Hashtbl.find index sym_name in
+    let obj, obj_index = objects.(objno) in
+    let symno = Hashtbl.find obj_index sym_name in
+    let {typ; value; _} = obj.symbols.(symno) in
+    let text_base, data_base, bss_base = offsets.(objno) in
+    match typ with
+    | Type (_, Text) -> Some Text, Int32.add text_base value
+    | Type (_, Data) -> Some Data, Int32.add data_base value
+    | Type (_, Bss) -> Some Bss, Int32.add bss_base value
+    | Type (_, Absolute) -> None, value
+    | Type (_, Undefined) -> assert false
+    | Stab _ -> assert false
+  in
   let relocate_object i ({Aout.text_reloc; data_reloc; symbols; _}, _) = 
     let text_base, data_base, bss_base = offsets.(i) in
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
-      let reloc_address = base_offset + reloc_address in
+      let reloc_address = Int32.to_int base_offset + reloc_address in
       let open Aout in
       let () =
 	match pcrel, size with
 	| false, Long -> ()
 	| _ -> failwith "unsupported size/pcrel"
-      in
-      let swap_words v = 
-	let low = Int32.logand v 0xffffl in
-	let high = Int32.logand (Int32.shift_right_logical v 16) 0xffffl in
-	Int32.logor (Int32.shift_left low 16) high
       in
       let update shift = 
 	let value = Bytes.read_long content reloc_address in
@@ -91,28 +107,47 @@ let link padding (objects, index, unresolved_symbols) =
 	 let {name; typ; value; _} = symbols.(no) in
 	 begin match typ with
 	 | Type (External, Undefined) when Hashtbl.mem index name ->
-	    let objno = Hashtbl.find index name in
-	    let obj, obj_index = objects.(objno) in
-	    let symno = Hashtbl.find obj_index name in
-	    let {typ; value; _} = obj.symbols.(symno) in
+	    let section, value = get_symbol_section_value name in
 	    update value;
-	    {info with reloc_address; reloc_base = Section (section_of_type typ)}
+	    begin match section with
+	    | None -> None
+	    | Some section -> Some {info with reloc_address; reloc_base = Section section}
+	    end
 	 | Type (External, Undefined) ->
 	    assert (not (Hashtbl.mem index name));
 	    let symno = Hashtbl.find new_symbols_index name in
-	    {info with reloc_address; reloc_base = Symbol symno}
+	    Some {info with reloc_address; reloc_base = Symbol symno}
 	 | Type (Local, Undefined) -> assert false
 	 | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
 	 | Stab _ -> assert false
 	 end
-      | Section Text -> update (Int32.of_int text_base); {info with reloc_address}
-      | Section Data -> update (Int32.of_int data_base); {info with reloc_address}
-      | Section Bss -> update (Int32.of_int bss_base); {info with reloc_address}
+      | Section Text -> update text_base; Some {info with reloc_address}
+      | Section Data -> update data_base; Some {info with reloc_address}
+      | Section Bss -> update bss_base; Some {info with reloc_address}
       | Section (Undefined | Absolute) -> assert false
     in
-    let text_reloc = List.map (f text text_base) text_reloc in
-    let data_reloc = List.map (f data data_base) data_reloc in
+    let text_reloc = ListExt.choose (f text text_base) text_reloc in
+    let data_reloc = ListExt.choose (f data data_base) data_reloc in
     text_reloc, data_reloc
   in
-  let _ = Array.mapi relocate_object objects in
-  ()
+  let n = Array.length objects in
+  let rec relocate i = 
+    if i < n then
+      let text_hd, data_hd = relocate_object i objects.(i) in
+      let text_tl, data_tl = relocate (i+1) in
+      text_hd @ text_tl, data_hd @ data_tl
+    else [], []
+  in
+  let text_reloc, data_reloc = relocate 0 in
+  let open Aout in
+  {
+    filename = "";
+    machine = M68000;
+    magic = OMAGIC;
+    text = Bytes.to_string text;
+    data = Bytes.to_string data;
+    bss_size;
+    text_reloc;
+    data_reloc;
+    symbols = new_symbols;
+  }
