@@ -6,14 +6,15 @@ type padding =
   | QuadPhrase
 
 let pad padding offset =
+  let f n = (offset + n) land (lnot n) in
   match padding with
-  | Word -> (offset + 1) land (lnot 0x1)
-  | Long -> (offset + 3) land (lnot 0x3)
-  | Phrase -> (offset + 7) land (lnot 0x7)
-  | DoublePhrase -> (offset + 15) land (lnot 0xf)
-  | QuadPhrase -> (offset + 31) land (lnot 0x1f)
+  | Word -> f 1
+  | Long -> f 3
+  | Phrase -> f 7
+  | DoublePhrase -> f 15
+  | QuadPhrase -> f 31
 
-class section_emitter padding = 
+class section padding = 
   object(this)
     val mutable offset = 0
     val buf = Buffer.create 1024 
@@ -31,3 +32,19 @@ class section_emitter padding =
     method offset = offset
     method content = Buffer.contents buf
   end
+
+let link padding (objects, _index, _unresolved_symbols) = 
+  let text_section = new section padding in
+  let data_section = new section padding in
+  let bss_offset = ref 0 in
+  let offsets = Array.map (fun _ -> 0, 0, 0) objects in
+  let f i {Aout.text; data; bss_size; filename; _} = 
+    offsets.(i) <- text_section # offset, data_section # offset, !bss_offset;
+    Printf.printf "%s: 0x%08x 0x%08x 0x%08x\n" filename (text_section # offset) (data_section # offset) !bss_offset;
+    text_section # add_content text;
+    data_section # add_content data;
+    bss_offset := pad padding (!bss_offset + bss_size);
+  in
+  Array.iteri f objects
+  
+  

@@ -58,9 +58,9 @@ type object_params =
       filename: string;
       machine: machine;
       magic: magic;
-      text_section: string;
-      data_section: string;
-      bss_section_size: int;
+      text: string;
+      data: string;
+      bss_size: int;
       text_reloc: reloc_info list;
       data_reloc: reloc_info list;
       symbols: symbol array;

@@ -59,9 +59,9 @@ type object_params =
       filename: string;
       machine: machine;
       magic: magic;
-      text_section: string;
-      data_section: string;
-      bss_section_size: int;
+      text: string;
+      data: string;
+      bss_size: int;
       text_reloc: reloc_info list;
       data_reloc: reloc_info list;
       symbols: symbol array;
@@ -199,14 +199,14 @@ let load_object filename content =
   | Some machine, Some magic ->
       let text_size = Int32.to_int (StringExt.read_long content 4) in
       let data_size = Int32.to_int (StringExt.read_long content 8) in
-      let bss_section_size = Int32.to_int (StringExt.read_long content 12) in
+      let bss_size = Int32.to_int (StringExt.read_long content 12) in
       let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
       let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
       let sym_size = Int32.to_int (StringExt.read_long content 16) in
       let offset = 32 in
-      let text_section = StringExt.read_substring content offset text_size in
+      let text = StringExt.read_substring content offset text_size in
       let offset = offset + text_size in
-      let data_section = StringExt.read_substring content offset data_size in
+      let data = StringExt.read_substring content offset data_size in
       let offset = offset + data_size in
       let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
       let offset = offset + text_reloc_size in
@@ -220,9 +220,9 @@ let load_object filename content =
 	  filename;
 	  machine;
 	  magic;
-          text_section;
-          data_section;
-          bss_section_size;
+          text;
+          data;
+          bss_size;
           text_reloc;
           data_reloc;
           symbols;
