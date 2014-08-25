@@ -9,7 +9,7 @@ let text_segment_type = ref None
 let data_segment_type = ref None
 let bss_segment_type = ref None
 
-let section_alignment = ref 7 (* phrase *)
+let section_padding = ref Linker.Phrase (* phrase *)
 
 let coff_executable = ref false
 let noheaderflag = ref false
@@ -101,11 +101,11 @@ let mk_spec () =
    "-n", Set noheaderflag, "output no file header to .abs file";
    "-o", String (fun s -> output_name := s), "<name> set output name";
 
-   "-rw", Unit (fun () -> section_alignment := 1), "set alignment size to word size (2 bytes)";
-   "-rl", Unit (fun () -> section_alignment := 3), "set alignment size to long size (4 bytes)";
-   "-rp", Unit (fun () -> section_alignment := 7), "set alignment size to phrase size (8 bytes)";
-   "-rd", Unit (fun () -> section_alignment := 15), "set alignment size to double phrase size (16 bytes)";
-   "-rq", Unit (fun () -> section_alignment := 31), "set alignment size to quad phrase size (32 bytes)";
+   "-rw", Unit (fun () -> section_padding := Linker.Word), "set alignment size to word size (2 bytes)";
+   "-rl", Unit (fun () -> section_padding := Linker.Long), "set alignment size to long size (4 bytes)";
+   "-rp", Unit (fun () -> section_padding := Linker.Phrase), "set alignment size to phrase size (8 bytes)";
+   "-rd", Unit (fun () -> section_padding := Linker.DoublePhrase), "set alignment size to double phrase size (16 bytes)";
+   "-rq", Unit (fun () -> section_padding := Linker.QuadPhrase), "set alignment size to quad phrase size (32 bytes)";
 
    "-v", Unit (fun () -> Log.set_verbose_mode true), "set verbose mode";
    "-w", Unit (fun () -> Log.set_warning_enabled true), "show linker warnings";
