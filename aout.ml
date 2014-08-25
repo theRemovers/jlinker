@@ -150,6 +150,10 @@ let get_size = function
   | 2 -> Long
   | _ -> failwith "get_size"
 
+let section_of_type = function
+  | Type (_, section) -> section
+  | Stab _ -> failwith "section_of_type"
+
 let read_reloc_info (content, base) offset =
   let offset = base + offset in
   let reloc_address = Int32.to_int (StringExt.read_long content offset) in
@@ -161,10 +165,7 @@ let read_reloc_info (content, base) offset =
   let extern = get_flag 4 in
   let size = get_size ((flags land 0x60) lsr 5) in
   let reloc_base = 
-    if not extern then 
-      match get_symbol_type reloc_base with
-      | Type (_, section) -> Section section
-      | _ -> failwith "invalid type"
+    if not extern then Section (section_of_type (get_symbol_type reloc_base))
     else Symbol (Int32.to_int reloc_base)
   in
   let baserel = get_flag 3 in
@@ -191,6 +192,16 @@ let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
   let value = StringExt.read_long symbol_table (offset + 8) in
   {name; typ; other; desc; value}
+
+let build_index symbols = 
+  let tbl = Hashtbl.create (Array.length symbols) in
+  let f i {name; typ; _} = 
+    match typ with
+    | Type _ -> Hashtbl.replace tbl name i
+    | _ -> ()
+  in
+  Array.iteri f symbols;
+  tbl
 
 let load_object filename content =
   let mach = StringExt.read_word content 0 in

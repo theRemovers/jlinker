@@ -66,4 +66,8 @@ type object_params =
       symbols: symbol array;
     }
 
+val section_of_type: symbol_type -> section
+
+val build_index: symbol array -> (string, int) Hashtbl.t
+
 val load_object: string -> string -> object_params option
