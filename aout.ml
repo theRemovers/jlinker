@@ -265,4 +265,5 @@ let save_object filename {machine; magic; text; data; bss_size; symbols; text_re
   let oc = open_out_bin filename in
   emit_word oc (val_of_machine machine);
   emit_word oc (val_of_magic magic);
+  flush oc;
   close_out oc

@@ -14,7 +14,7 @@ let section_padding = ref Linker.Phrase (* phrase *)
 let coff_executable = ref false
 let noheaderflag = ref false
 
-let output_name = ref ""
+let output_name = ref "output"
 
 let lib_directories = ref []
 
@@ -143,7 +143,8 @@ let main () =
     let solution, index, unresolved_symbols = Problem.solve objects in
     Array.iter (function {Aout.filename; _} -> Printf.printf "Keeping %s\n" filename) solution;
     List.iter (function (sym_name, value) -> Printf.printf "Symbol %s [%ld] is unresolved\n" sym_name value) unresolved_symbols;
-    Linker.link !section_padding (solution, index, unresolved_symbols)
+    let obj = Linker.link !section_padding (solution, index, unresolved_symbols) in
+    Aout.save_object !output_name obj
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)
