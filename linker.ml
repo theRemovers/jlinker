@@ -90,21 +90,20 @@ let link padding (objects, index, unresolved_symbols) =
       | Symbol no -> 
 	 let {name; typ; value; _} = symbols.(no) in
 	 begin match typ with
+	 | Type (External, Undefined) when Hashtbl.mem index name ->
+	    let objno = Hashtbl.find index name in
+	    let obj, obj_index = objects.(objno) in
+	    let symno = 
+	      assert (Hashtbl.mem obj_index name);
+	      Hashtbl.find obj_index name
+	    in
+	    let {typ; value; _} = obj.symbols.(symno) in
+	    update value;
+	    {info with reloc_address; reloc_base = Section (section_of_type typ)}
 	 | Type (External, Undefined) ->
-	    begin try
-	      let objno = Hashtbl.find index name in
-	      let obj, obj_index = objects.(objno) in
-	      let symno = 
-		assert (Hashtbl.mem obj_index name);
-		Hashtbl.find obj_index name
-	      in
-	      let {typ; value; _} = obj.symbols.(symno) in
-	      update value;
-	      {info with reloc_address; reloc_base = Section (section_of_type typ)}
-	    with Not_found -> 
-	      let symno = Hashtbl.find new_symbols_index name in
-	      {info with reloc_address; reloc_base = Symbol symno}
-	    end
+	    assert (not (Hashtbl.mem index name));
+	    let symno = Hashtbl.find new_symbols_index name in
+	    {info with reloc_address; reloc_base = Symbol symno}
 	 | Type (Local, Undefined) -> assert false
 	 | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
 	 | Stab _ -> assert false
