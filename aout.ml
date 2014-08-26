@@ -67,22 +67,22 @@ type object_params =
       symbols: symbol array;
     }
 
-let get_machine = function
+let machine_of_int32 = function
   | 0l -> Some M68000
   | 1l -> Some M68010
   | 2l -> Some M68020
   | _ -> None
 
-let val_of_machine = function
+let int32_of_machine = function
   | M68000 -> 0l
   | M68010 -> 1l
   | M68020 -> 2l
 
-let get_magic = function
+let magic_of_int32 = function
   | 0o407l -> Some OMAGIC
   | _ -> None
 
-let val_of_magic = function
+let int32_of_magic = function
   | OMAGIC -> 0o407l
 
 let string_of_location = function
@@ -116,7 +116,7 @@ let string_of_symbol_type = function
   | Type (location, section) -> Format.sprintf "%s[%s]" (string_of_location location) (string_of_section section)
   | Stab typ -> Format.sprintf "stab[%s]" (string_of_stab typ)
 
-let get_symbol_type = function
+let symbol_type_of_int32 = function
   | 0l -> Type (Local, Undefined)
   | 1l -> Type (External, Undefined)
   | 2l -> Type (Local, Absolute)
@@ -143,6 +143,52 @@ let get_symbol_type = function
   | 0xe0l -> Stab RBRAC
   | x -> Format.ksprintf failwith "unknown symbol type %ld" x
 
+let int32_of_symbol_type = function
+  | Type (Local, Undefined) -> 0l
+  | Type (External, Undefined) -> 1l
+  | Type (Local, Absolute) -> 2l
+  | Type (External, Absolute) -> 3l
+  | Type (Local, Text) -> 4l
+  | Type (External, Text) -> 5l
+  | Type (Local, Data) -> 6l
+  | Type (External, Data) -> 7l
+  | Type (Local, Bss) -> 8l
+  | Type (External, Bss) -> 9l
+  | Stab GSYM -> 0x20l
+  | Stab FUN -> 0x24l
+  | Stab STSYM -> 0x26l
+  | Stab LCSYM -> 0x28l
+  | Stab BNSYM -> 0x2el
+  | Stab OPT -> 0x3cl
+  | Stab RSYM -> 0x40l
+  | Stab SLINE -> 0x44l
+  | Stab SO -> 0x64l
+  | Stab LSYM -> 0x80l
+  | Stab SOL -> 0x84l
+  | Stab PSYM -> 0xa0l
+  | Stab LBRAC -> 0xc0l
+  | Stab RBRAC -> 0xe0l
+
+let section_of_int32 = function
+  | 0l -> Undefined
+  | 1l -> Undefined
+  | 2l -> Absolute
+  | 3l -> Absolute
+  | 4l -> Text
+  | 5l -> Text
+  | 6l -> Data
+  | 7l -> Data
+  | 8l -> Bss
+  | 9l -> Bss
+  | x -> Format.ksprintf failwith "invalid section %ld" x
+
+let int32_of_section = function
+  | Undefined -> 0l
+  | Absolute -> 2l
+  | Text -> 4l
+  | Data -> 6l
+  | Bss -> 8l
+
 let string_of_reloc_base = function
   | Symbol no -> Format.sprintf "symbol(%d)" no
   | Section section -> Format.sprintf "%s" (string_of_section section)
@@ -152,11 +198,16 @@ let string_of_size = function
   | Word -> "word"
   | Long -> "long"
 
-let get_size = function
+let size_of_int = function
   | 0 -> Byte
   | 1 -> Word
   | 2 -> Long
-  | _ -> failwith "get_size"
+  | _ -> failwith "size_of_int"
+
+let int_of_size = function
+  | Byte -> 0
+  | Word -> 1
+  | Long -> 2
 
 let section_of_type = function
   | Type (_, section) -> section
@@ -171,9 +222,9 @@ let read_reloc_info (content, base) offset =
   let reloc_base = Int32.shift_right_logical data 8 in
   let pcrel = get_flag 7 in
   let extern = get_flag 4 in
-  let size = get_size ((flags land 0x60) lsr 5) in
+  let size = size_of_int ((flags land 0x60) lsr 5) in
   let reloc_base = 
-    if not extern then Section (section_of_type (get_symbol_type reloc_base))
+    if not extern then Section (section_of_int32 reloc_base)
     else Symbol (Int32.to_int reloc_base)
   in
   let baserel = get_flag 3 in
@@ -195,7 +246,7 @@ let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let offset = base_table + offset in
   let index = Int32.to_int (StringExt.read_long symbol_table offset) in
   let name = StringExt.read_string symbol_names (base_names + index) '\000' in
-  let typ = get_symbol_type (StringExt.read_byte symbol_table (offset + 4)) in
+  let typ = symbol_type_of_int32 (StringExt.read_byte symbol_table (offset + 4)) in
   let other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
   let desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
   let value = StringExt.read_long symbol_table (offset + 8) in
@@ -214,7 +265,7 @@ let build_index symbols =
 let load_object filename content =
   let mach = StringExt.read_word content 0 in
   let magic = StringExt.read_word content 2 in
-  match get_machine mach, get_magic magic with
+  match machine_of_int32 mach, magic_of_int32 magic with
   | Some machine, Some magic ->
       let text_size = Int32.to_int (StringExt.read_long content 4) in
       let data_size = Int32.to_int (StringExt.read_long content 8) in
@@ -261,9 +312,62 @@ let emit_long oc v =
   output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
   output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
 
+let emit_string oc s = output_string oc s
+
+let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptable; relative; copy} = 
+  emit_long oc (Int32.of_int reloc_address);
+  let set_flag b n = if b then 1 lsl n else 0 in
+  let flags = set_flag pcrel 7 in
+  let flags = flags lor ((int_of_size size) lsl 5) in
+  let flags = flags lor (set_flag baserel 3) in
+  let flags = flags lor (set_flag jmptable 2) in
+  let flags = flags lor (set_flag relative 1) in
+  let flags = flags lor (set_flag copy 0) in
+  let extern, reloc_base = 
+    match reloc_base with
+    | Section section -> false, int32_of_section section
+    | Symbol no -> true, Int32.of_int no
+  in
+  let flags = flags lor (set_flag extern 4) in
+  let data = Int32.logor (Int32.shift_left reloc_base 8) (Int32.of_int (flags land 0xff)) in
+  emit_long oc data
+
+let emit_symbols oc symbols = 
+  let n = Array.length symbols in
+  let rec emit_symbol i index =
+    if i < n then begin
+      let {name; typ; other; desc; value} = symbols.(i) in
+      emit_long oc (Int32.of_int index);
+      emit_byte oc (int32_of_symbol_type typ);
+      emit_byte oc (Int32.of_int other);
+      emit_word oc (Int32.of_int desc);
+      emit_long oc value;
+      emit_symbol (i+1) (index + String.length name + 1)
+    end else index
+  in
+  let index = emit_symbol 0 0 in
+  for i = 0 to n-1 do
+    let {name; _} = symbols.(i) in
+    output_string oc name;
+    output_char oc '\000'
+  done;
+  if index mod 2 = 1 then output_char oc '\000'
+
 let save_object filename {machine; magic; text; data; bss_size; symbols; text_reloc; data_reloc} = 
   let oc = open_out_bin filename in
-  emit_word oc (val_of_machine machine);
-  emit_word oc (val_of_magic magic);
+  emit_word oc (int32_of_machine machine);
+  emit_word oc (int32_of_magic magic);
+  emit_long oc (Int32.of_int (String.length text));
+  emit_long oc (Int32.of_int (String.length data));
+  emit_long oc (Int32.of_int bss_size);
+  emit_long oc (Int32.of_int (12 * Array.length symbols));
+  emit_long oc 0l;
+  emit_long oc (Int32.of_int (8 * List.length text_reloc));
+  emit_long oc (Int32.of_int (8 * List.length data_reloc));
+  emit_string oc text;
+  emit_string oc data;
+  List.iter (emit_reloc_info oc) text_reloc;
+  List.iter (emit_reloc_info oc) data_reloc;
+  emit_symbols oc symbols;
   flush oc;
   close_out oc
