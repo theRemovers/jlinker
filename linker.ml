@@ -55,20 +55,7 @@ let link padding (objects, index, unresolved_symbols) =
   let text = text_section # content in
   let data = data_section # content in
   let bss_size = !bss_offset in
-  let new_symbols = 
-    let f (name, value) = 
-      let open Aout in
-      { name;
-	value;
-	typ = Type (External, Undefined);
-	other = 0;
-	desc = 0;
-      }
-    in
-    Array.of_list (List.map f unresolved_symbols)
-  in
-  let new_symbols_index = Aout.build_index new_symbols in
-  let get_symbol_section_value sym_name =
+  let get_symbol_typ_value sym_name =
     let open Aout in
     let objno = Hashtbl.find index sym_name in
     let obj, obj_index = objects.(objno) in
@@ -76,13 +63,31 @@ let link padding (objects, index, unresolved_symbols) =
     let {typ; value; _} = obj.symbols.(symno) in
     let text_base, data_base, bss_base = offsets.(objno) in
     match typ with
-    | Type (_, Text) -> Some Text, Int32.add text_base value
-    | Type (_, Data) -> Some Data, Int32.add data_base value
-    | Type (_, Bss) -> Some Bss, Int32.add bss_base value
-    | Type (_, Absolute) -> None, value
+    | Type (_, Text) -> typ, Int32.add text_base value
+    | Type (_, Data) -> typ, Int32.add data_base value
+    | Type (_, Bss) -> typ, Int32.add bss_base value
+    | Type (_, Absolute) -> typ, value
     | Type (_, Undefined) -> assert false
     | Stab _ -> assert false
   in
+  let new_symbols = 
+    let mk_symbol typ (name, value) = {Aout.name; typ; value; other = 0; desc = 0} in
+    let globals = 
+      let f name = 
+	let typ, value = get_symbol_typ_value name in
+	let open Aout in
+	match typ with
+	| Type (External, (Text | Data | Bss | Absolute)) -> Some (mk_symbol typ (name, value))
+	| Type (External, Undefined) -> assert false
+	| Type (Local, _) -> None
+	| Stab _ -> assert false
+      in
+      ListExt.choose f (HashtblExt.keys index)
+    in
+    let externals = List.map (mk_symbol Aout.(Type (External, Undefined))) unresolved_symbols in
+    Array.of_list (globals @ externals)
+  in
+  let new_symbols_index = Aout.build_index new_symbols in
   let relocate_object i ({Aout.text_reloc; data_reloc; symbols; _}, _) = 
     let text_base, data_base, bss_base = offsets.(i) in
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
@@ -107,11 +112,13 @@ let link padding (objects, index, unresolved_symbols) =
 	 let {name; typ; value; _} = symbols.(no) in
 	 begin match typ with
 	 | Type (External, Undefined) when Hashtbl.mem index name ->
-	    let section, value = get_symbol_section_value name in
+	    let typ, value = get_symbol_typ_value name in
 	    update value;
-	    begin match section with
-	    | None -> None
-	    | Some section -> Some {info with reloc_address; reloc_base = Section section}
+	    begin match typ with
+	    | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
+	    | Type (_, Absolute) -> None
+	    | Type (_, Undefined) -> assert false
+	    | Stab _ -> assert false
 	    end
 	 | Type (External, Undefined) ->
 	    assert (not (Hashtbl.mem index name));
