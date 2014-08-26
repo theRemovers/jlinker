@@ -84,7 +84,7 @@ let link padding (objects, index, unresolved_symbols) =
       ListExt.choose f (HashtblExt.keys index)
     in
     let externals = List.map (mk_symbol Aout.(Type (External, Undefined))) unresolved_symbols in
-    Array.of_list (globals @ externals)
+    Array.of_list (List.stable_sort (fun s1 s2 -> Pervasives.compare s1.Aout.name s2.Aout.name) (globals @ externals))
   in
   let new_symbols_index = Aout.build_index new_symbols in
   let relocate_object i ({Aout.text_reloc; data_reloc; symbols; _}, _) = 
