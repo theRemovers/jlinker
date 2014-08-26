@@ -46,7 +46,6 @@ let link padding (objects, index, unresolved_symbols) =
   let offsets = Array.map (fun _ -> 0l, 0l, 0l) objects in
   let add_object i ({Aout.text; data; bss_size; filename; _}, _) = 
     offsets.(i) <- Int32.of_int (text_section # offset), Int32.of_int (data_section # offset), Int32.of_int !bss_offset;
-    Printf.printf "%s: 0x%08x 0x%08x 0x%08x\n" filename (text_section # offset) (data_section # offset) !bss_offset;
     text_section # add_content text;
     data_section # add_content data;
     bss_offset := pad padding (!bss_offset + bss_size);
