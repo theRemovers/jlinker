@@ -334,24 +334,21 @@ let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptabl
 
 let emit_symbols oc symbols = 
   let n = Array.length symbols in
-  let rec emit_symbol i index =
-    if i < n then begin
-      let {name; typ; other; desc; value} = symbols.(i) in
-      emit_long oc (Int32.of_int index);
-      emit_byte oc (int32_of_symbol_type typ);
-      emit_byte oc (Int32.of_int other);
-      emit_word oc (Int32.of_int desc);
-      emit_long oc value;
-      emit_symbol (i+1) (index + String.length name + 1)
-    end else index
-  in
-  let index = emit_symbol 0 0 in
+  let index = ref 0 in
+  for i = 0 to n-1 do
+    let {name; typ; other; desc; value} = symbols.(i) in
+    emit_long oc (Int32.of_int !index);
+    emit_byte oc (int32_of_symbol_type typ);
+    emit_byte oc (Int32.of_int other);
+    emit_word oc (Int32.of_int desc);
+    emit_long oc value;
+    index := !index + String.length name + 1;
+  done;
   for i = 0 to n-1 do
     let {name; _} = symbols.(i) in
     output_string oc name;
     output_char oc '\000'
-  done;
-  if index mod 2 = 1 then output_char oc '\000'
+  done
 
 let save_object filename {machine; magic; text; data; bss_size; symbols; text_reloc; data_reloc} = 
   let oc = open_out_bin filename in
