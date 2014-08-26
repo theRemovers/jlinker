@@ -334,7 +334,7 @@ let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptabl
 
 let emit_symbols oc symbols = 
   let n = Array.length symbols in
-  let index = ref 0 in
+  let index = ref 4 in
   for i = 0 to n-1 do
     let {name; typ; other; desc; value} = symbols.(i) in
     emit_long oc (Int32.of_int !index);
@@ -344,6 +344,7 @@ let emit_symbols oc symbols =
     emit_long oc value;
     index := !index + String.length name + 1;
   done;
+  emit_long oc (Int32.of_int !index);
   for i = 0 to n-1 do
     let {name; _} = symbols.(i) in
     output_string oc name;
