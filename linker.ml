@@ -54,19 +54,27 @@ let link padding (objects, index, unresolved_symbols) =
   let text = text_section # content in
   let data = data_section # content in
   let bss_size = !bss_offset in
+  let textlen = Bytes.length text and datalen = Bytes.length data in
+  let adjust_value objno section value = 
+    let open Aout in
+    let {text; data; _}, _ = objects.(objno) in
+    let text_base, data_base, bss_base = offsets.(objno) in
+    let obj_textlen = String.length text and obj_datalen = String.length data in
+    match section with
+    | Text -> Int32.add text_base value
+    | Data -> Int32.add data_base (Int32.add value (Int32.of_int (textlen - obj_textlen)))
+    | Bss -> Int32.add bss_base (Int32.add value (Int32.of_int (textlen + datalen - obj_textlen - obj_datalen)))
+    | Absolute -> value
+    | Undefined -> assert false
+  in
   let get_symbol_typ_value sym_name =
     let open Aout in
     let objno = Hashtbl.find index sym_name in
     let obj, obj_index = objects.(objno) in
     let symno = Hashtbl.find obj_index sym_name in
     let {typ; value; _} = obj.symbols.(symno) in
-    let text_base, data_base, bss_base = offsets.(objno) in
     match typ with
-    | Type (_, Text) -> typ, Int32.add text_base value
-    | Type (_, Data) -> typ, Int32.add data_base value
-    | Type (_, Bss) -> typ, Int32.add bss_base value
-    | Type (_, Absolute) -> typ, value
-    | Type (_, Undefined) -> assert false
+    | Type (_, section) -> typ, adjust_value objno section value
     | Stab _ -> assert false
   in
   let new_symbols = 
@@ -88,7 +96,6 @@ let link padding (objects, index, unresolved_symbols) =
   in
   let new_symbols_index = Aout.build_index new_symbols in
   let relocate_object i ({Aout.text_reloc; data_reloc; symbols; _}, _) = 
-    let text_base, data_base, bss_base = offsets.(i) in
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
       let reloc_address = Int32.to_int base_offset + reloc_address in
       let open Aout in
@@ -128,11 +135,10 @@ let link padding (objects, index, unresolved_symbols) =
 	 | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
 	 | Stab _ -> assert false
 	 end
-      | Section Text -> update text_base; Some {info with reloc_address}
-      | Section Data -> update data_base; Some {info with reloc_address}
-      | Section Bss -> update bss_base; Some {info with reloc_address}
+      | Section ((Text | Data | Bss) as section) -> update (adjust_value i section 0l); Some {info with reloc_address}
       | Section (Undefined | Absolute) -> assert false
     in
+    let text_base, data_base, _bss_base = offsets.(i) in
     let text_reloc = ListExt.choose (f text text_base) text_reloc in
     let data_reloc = ListExt.choose (f data data_base) data_reloc in
     text_reloc, data_reloc
