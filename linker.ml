@@ -20,7 +20,7 @@ class section padding =
     val buf = Buffer.create 1024 
     method private pad = 
       let n = pad padding offset - offset in
-      for i = 0 to n-1 do
+      for _i = 0 to n-1 do
 	Buffer.add_char buf '\000'
       done;
       offset <- offset + n
@@ -44,7 +44,7 @@ let link padding (objects, index, unresolved_symbols) =
   let data_section = new section padding in
   let bss_offset = ref 0 in
   let offsets = Array.map (fun _ -> 0l, 0l, 0l) objects in
-  let add_object i ({Aout.text; data; bss_size; filename; _}, _) = 
+  let add_object i ({Aout.text; data; bss_size; _}, _) = 
     offsets.(i) <- Int32.of_int (text_section # offset), Int32.of_int (data_section # offset), Int32.of_int !bss_offset;
     text_section # add_content text;
     data_section # add_content data;
@@ -95,7 +95,8 @@ let link padding (objects, index, unresolved_symbols) =
       let () =
 	match pcrel, size with
 	| false, Long -> ()
-	| _ -> failwith "unsupported size/pcrel"
+	| true, _ 
+	| _, (Byte | Word) -> failwith "unsupported size/pcrel"
       in
       let update shift = 
 	let value = Bytes.read_long content reloc_address in
@@ -108,7 +109,7 @@ let link padding (objects, index, unresolved_symbols) =
       in
       match reloc_base with
       | Symbol no -> 
-	 let {name; typ; value; _} = symbols.(no) in
+	 let {name; typ; _} = symbols.(no) in
 	 begin match typ with
 	 | Type (External, Undefined) when Hashtbl.mem index name ->
 	    let typ, value = get_symbol_typ_value name in
@@ -153,6 +154,7 @@ let link padding (objects, index, unresolved_symbols) =
     text = Bytes.to_string text;
     data = Bytes.to_string data;
     bss_size;
+    entry = 0l;
     text_reloc;
     data_reloc;
     symbols = new_symbols;

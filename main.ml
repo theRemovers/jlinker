@@ -133,7 +133,7 @@ let process_file = function
           end
       | Some obj -> Problem.Object obj
       end
-  | Binary (symbol, filename) -> failwith "todo"
+  | Binary (_symbol, _filename) -> failwith "todo"
 
 let main () =
   try

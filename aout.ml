@@ -62,6 +62,7 @@ type object_params =
       text: string;
       data: string;
       bss_size: int;
+      entry: Int32.t;
       text_reloc: reloc_info list;
       data_reloc: reloc_info list;
       symbols: symbol array;
@@ -84,37 +85,6 @@ let magic_of_int32 = function
 
 let int32_of_magic = function
   | OMAGIC -> 0o407l
-
-let string_of_location = function
-  | Local -> "local"
-  | External -> "external"
-
-let string_of_section = function
-  | Undefined -> "undef"
-  | Absolute -> "abs"
-  | Text -> "text"
-  | Data -> "data"
-  | Bss -> "bss"
-
-let string_of_stab = function
-  | OPT -> "OPT"
-  | SO -> "SO"
-  | SOL -> "SOL"
-  | SLINE -> "SLINE"
-  | LSYM -> "LSYM"
-  | BNSYM -> "BNSYM"
-  | FUN -> "FUN"
-  | PSYM -> "PSYM"
-  | LBRAC -> "LBRAC"
-  | RBRAC -> "RBRAC"
-  | RSYM -> "RSYM"
-  | STSYM -> "STSYM"
-  | GSYM -> "GSYM"
-  | LCSYM -> "LCSYM"
-
-let string_of_symbol_type = function
-  | Type (location, section) -> Format.sprintf "%s[%s]" (string_of_location location) (string_of_section section)
-  | Stab typ -> Format.sprintf "stab[%s]" (string_of_stab typ)
 
 let symbol_type_of_int32 = function
   | 0l -> Type (Local, Undefined)
@@ -189,15 +159,6 @@ let int32_of_section = function
   | Data -> 6l
   | Bss -> 8l
 
-let string_of_reloc_base = function
-  | Symbol no -> Format.sprintf "symbol(%d)" no
-  | Section section -> Format.sprintf "%s" (string_of_section section)
-
-let string_of_size = function
-  | Byte -> "byte"
-  | Word -> "word"
-  | Long -> "long"
-
 let size_of_int = function
   | 0 -> Byte
   | 1 -> Word
@@ -257,7 +218,7 @@ let build_index symbols =
   let f i {name; typ; _} = 
     match typ with
     | Type _ -> Hashtbl.replace tbl name i
-    | _ -> ()
+    | Stab _ -> ()
   in
   Array.iteri f symbols;
   tbl
@@ -270,9 +231,10 @@ let load_object filename content =
       let text_size = Int32.to_int (StringExt.read_long content 4) in
       let data_size = Int32.to_int (StringExt.read_long content 8) in
       let bss_size = Int32.to_int (StringExt.read_long content 12) in
+      let sym_size = Int32.to_int (StringExt.read_long content 16) in
+      let entry = StringExt.read_long content 20 in
       let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
       let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
-      let sym_size = Int32.to_int (StringExt.read_long content 16) in
       let offset = 32 in
       let text = StringExt.read_substring content offset text_size in
       let offset = offset + text_size in
@@ -284,6 +246,7 @@ let load_object filename content =
       let offset = offset + data_reloc_size in
       let base_tbl = offset in
       let offset = offset + sym_size in
+      let _size = StringExt.read_long content offset in
       let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
       Some
 	{
@@ -293,6 +256,7 @@ let load_object filename content =
           text;
           data;
           bss_size;
+	  entry;
           text_reloc;
           data_reloc;
           symbols;
@@ -351,7 +315,7 @@ let emit_symbols oc symbols =
     output_char oc '\000'
   done
 
-let save_object filename {machine; magic; text; data; bss_size; symbols; text_reloc; data_reloc} = 
+let save_object filename {filename = _; machine; magic; text; data; bss_size; entry; symbols; text_reloc; data_reloc} = 
   let oc = open_out_bin filename in
   emit_word oc (int32_of_machine machine);
   emit_word oc (int32_of_magic magic);
@@ -359,7 +323,7 @@ let save_object filename {machine; magic; text; data; bss_size; symbols; text_re
   emit_long oc (Int32.of_int (String.length data));
   emit_long oc (Int32.of_int bss_size);
   emit_long oc (Int32.of_int (12 * Array.length symbols));
-  emit_long oc 0l;
+  emit_long oc entry;
   emit_long oc (Int32.of_int (8 * List.length text_reloc));
   emit_long oc (Int32.of_int (8 * List.length data_reloc));
   emit_string oc text;

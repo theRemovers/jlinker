@@ -61,6 +61,7 @@ type object_params =
       text: string;
       data: string;
       bss_size: int;
+      entry: Int32.t;
       text_reloc: reloc_info list;
       data_reloc: reloc_info list;
       symbols: symbol array;
