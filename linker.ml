@@ -71,46 +71,50 @@ let find_object_and_symbol (index, objects) =
     let sym_no = Hashtbl.find obj_index sym_name in
     obj_no, obj.symbols.(sym_no)
 
+let mk_symbol typ (name, value) = {Aout.name; typ; value; other = 0; desc = 0}
+
+let build_symbol_table find_symbol (index, unresolved_symbols) = 
+  let globals = 
+    let f name = 
+      let typ, value = find_symbol name in
+      let open Aout in
+      match typ with
+      | Type (External, (Text | Data | Bss | Absolute)) -> Some (mk_symbol typ (name, value))
+      | Type (External, Undefined) -> assert false
+      | Type (Local, _) -> None
+      | Stab _ -> assert false
+    in
+    ListExt.choose f (HashtblExt.keys index)
+  in
+  let externals = List.map (mk_symbol Aout.(Type (External, Undefined))) unresolved_symbols in
+  let compare {Aout.typ = typ1; name = name1; _} {Aout.typ = typ2; name = name2; _} = Pervasives.compare (typ1, name1) (typ2, name2) in
+  Array.of_list (List.stable_sort compare (globals @ externals))
+
+let adjust_symbol_value (objects, offsets) textlen datalen objno section value = 
+  let open Aout in
+  let {text; data; _} = objects.(objno) in
+  let text_base, data_base, bss_base = offsets.(objno) in
+  let obj_textlen = String.length text and obj_datalen = String.length data in
+  match section with
+  | Text -> Int32.add text_base value
+  | Data -> Int32.add data_base (Int32.add value (Int32.of_int (textlen - obj_textlen)))
+  | Bss -> Int32.add bss_base (Int32.add value (Int32.of_int (textlen + datalen - obj_textlen - obj_datalen)))
+  | Absolute -> value
+  | Undefined -> assert false
+
 let link padding (objects, index, unresolved_symbols) = 
   let offsets, text, data, bss_size = concat padding objects in
   let lookup = find_object_and_symbol (index, objects) in
   let textlen = Bytes.length text and datalen = Bytes.length data in
-  let adjust_value objno section value = 
-    let open Aout in
-    let {text; data; _} = objects.(objno) in
-    let text_base, data_base, bss_base = offsets.(objno) in
-    let obj_textlen = String.length text and obj_datalen = String.length data in
-    match section with
-    | Text -> Int32.add text_base value
-    | Data -> Int32.add data_base (Int32.add value (Int32.of_int (textlen - obj_textlen)))
-    | Bss -> Int32.add bss_base (Int32.add value (Int32.of_int (textlen + datalen - obj_textlen - obj_datalen)))
-    | Absolute -> value
-    | Undefined -> assert false
-  in
-  let get_symbol_typ_value sym_name =
+  let adjust_value = adjust_symbol_value (objects, offsets) textlen datalen in
+  let find_symbol sym_name =
     let open Aout in
     let objno, {typ; value; _} = lookup sym_name in
     match typ with
     | Type (_, section) -> typ, adjust_value objno section value
     | Stab _ -> assert false
   in
-  let new_symbols = 
-    let mk_symbol typ (name, value) = {Aout.name; typ; value; other = 0; desc = 0} in
-    let globals = 
-      let f name = 
-	let typ, value = get_symbol_typ_value name in
-	let open Aout in
-	match typ with
-	| Type (External, (Text | Data | Bss | Absolute)) -> Some (mk_symbol typ (name, value))
-	| Type (External, Undefined) -> assert false
-	| Type (Local, _) -> None
-	| Stab _ -> assert false
-      in
-      ListExt.choose f (HashtblExt.keys index)
-    in
-    let externals = List.map (mk_symbol Aout.(Type (External, Undefined))) unresolved_symbols in
-    Array.of_list (List.stable_sort (fun s1 s2 -> Pervasives.compare s1.Aout.name s2.Aout.name) (globals @ externals))
-  in
+  let new_symbols = build_symbol_table find_symbol (index, unresolved_symbols) in
   let new_symbols_index = Aout.build_index new_symbols in
   let relocate_object i {Aout.text_reloc; data_reloc; symbols; _} = 
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
@@ -136,7 +140,7 @@ let link padding (objects, index, unresolved_symbols) =
 	 let {name; typ; _} = symbols.(no) in
 	 begin match typ with
 	 | Type (External, Undefined) when Hashtbl.mem index name ->
-	    let typ, value = get_symbol_typ_value name in
+	    let typ, value = find_symbol name in
 	    update value;
 	    begin match typ with
 	    | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
