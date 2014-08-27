@@ -51,7 +51,7 @@ let swap_words v =
   let high = Int32.logand (Int32.shift_right_logical v 16) 0xffffl in
   Int32.logor (Int32.shift_left low 16) high
 
-let concat padding objects = 
+let concat padding objects common_symbols = 
   let n = Array.length objects in
   let text_section = new section padding in
   let data_section = new section padding in
@@ -64,7 +64,15 @@ let concat padding objects =
     data_section # add_content data;
     bss_section # add_content bss_size;
   done;
-  offsets, text_section # content, data_section # content, bss_section # offset
+  let common_tbl = 
+    let tbl = Hashtbl.create 16 in
+    List.iter (fun (sym_name, size) -> 
+	       let offset = bss_section # offset in
+	       Hashtbl.replace tbl sym_name (Int32.of_int offset);
+	       bss_section # add_content (Int32.to_int size)) common_symbols;
+    tbl
+  in
+  offsets, text_section # content, data_section # content, bss_section # offset, common_tbl
 
 let find_object_and_symbol (index, objects) =
   let open Aout in
@@ -107,8 +115,14 @@ let adjust_symbol_value (objects, offsets) textlen datalen objno section value =
   | Absolute -> value
   | Undefined -> assert false
 
-let partial_link padding (objects, index, unresolved_symbols) = 
-  let offsets, text, data, bss_size = concat padding objects in
+let partial_link ~resolve_common_symbols padding (objects, index, unresolved_symbols) = 
+  let common_symbols, unresolved_symbols = 
+    if resolve_common_symbols then
+      let is_common (_, value) = value <> 0l in
+      List.partition is_common unresolved_symbols
+    else [], unresolved_symbols
+  in
+  let offsets, text, data, bss_size, common_tbl = concat padding objects common_symbols in
   let lookup = find_object_and_symbol (index, objects) in
   let textlen = Bytes.length text and datalen = Bytes.length data in
   let adjust_value = adjust_symbol_value (objects, offsets) textlen datalen in
@@ -153,8 +167,14 @@ let partial_link padding (objects, index, unresolved_symbols) =
 	    | Type (_, Undefined) -> assert false
 	    | Stab _ -> assert false
 	    end
+	 | Type (External, Undefined) when Hashtbl.mem common_tbl name ->
+	    assert (not (Hashtbl.mem index name));	    
+	    let value = Hashtbl.find common_tbl name in
+	    update (Int32.add value (Int32.of_int (textlen + datalen)));
+	    Some {info with reloc_address; reloc_base = Section Bss}
 	 | Type (External, Undefined) ->
 	    assert (not (Hashtbl.mem index name));
+	    assert (not (Hashtbl.mem common_tbl name));
 	    let symno = Hashtbl.find new_symbols_index name in
 	    Some {info with reloc_address; reloc_base = Symbol symno}
 	 | Type (Local, Undefined) -> assert false
