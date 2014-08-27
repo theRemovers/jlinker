@@ -15,49 +15,71 @@ let pad padding offset =
   | QuadPhrase -> f 31
 
 class section padding = 
-  object(this)
-    val mutable offset = 0
-    val buf = Buffer.create 1024 
-    method private pad = 
-      let n = pad padding offset - offset in
-      for _i = 0 to n-1 do
-	Buffer.add_char buf '\000'
-      done;
-      offset <- offset + n
-    method add_content data = 
-      let n = String.length data in
-      Buffer.add_string buf data;
-      offset <- offset + n;
-      this # pad
-    method offset = offset
-    method content = Bytes.of_string (Buffer.contents buf)
-  end
+object(this)
+  val mutable offset = 0
+  val buf = Buffer.create 1024 
+  method private pad = 
+    let n = pad padding offset - offset in
+    for _i = 0 to n-1 do
+      Buffer.add_char buf '\000'
+    done;
+    offset <- offset + n
+  method add_content data = 
+    let n = String.length data in
+    Buffer.add_string buf data;
+    offset <- offset + n;
+    this # pad
+  method offset = offset
+  method content = Bytes.of_string (Buffer.contents buf)
+end
+
+class virtual_section padding = 
+object
+  val mutable offset = 0
+  method add_content n = 
+    offset <- pad padding (offset + n)
+  method offset = offset
+end
 
 let swap_words v = 
   let low = Int32.logand v 0xffffl in
   let high = Int32.logand (Int32.shift_right_logical v 16) 0xffffl in
   Int32.logor (Int32.shift_left low 16) high
 
-let link padding (objects, index, unresolved_symbols) = 
-  let objects = Array.map (fun obj -> obj, Aout.build_index obj.Aout.symbols) objects in
+let concat padding objects = 
+  let n = Array.length objects in
   let text_section = new section padding in
   let data_section = new section padding in
-  let bss_offset = ref 0 in
+  let bss_section = new virtual_section padding in
   let offsets = Array.map (fun _ -> 0l, 0l, 0l) objects in
-  let add_object i ({Aout.text; data; bss_size; _}, _) = 
-    offsets.(i) <- Int32.of_int (text_section # offset), Int32.of_int (data_section # offset), Int32.of_int !bss_offset;
+  for i = 0 to n-1 do
+    let {Aout.text; data; bss_size; _} = objects.(i) in
+    offsets.(i) <- Int32.of_int (text_section # offset), Int32.of_int (data_section # offset), Int32.of_int (bss_section # offset);
     text_section # add_content text;
     data_section # add_content data;
-    bss_offset := pad padding (!bss_offset + bss_size);
+    bss_section # add_content bss_size;
+  done;
+  offsets, text_section # content, data_section # content, bss_section # offset
+
+let find_object_and_symbol (index, objects) =
+  let open Aout in
+  let indices = Array.map (fun {symbols; _} -> build_index symbols) objects in
+  let f sym_name =
+    let obj_no = Hashtbl.find index sym_name in
+    let obj = objects.(obj_no) in
+    let obj_index = indices.(obj_no) in
+    let sym_no = Hashtbl.find obj_index sym_name in
+    obj_no, obj.symbols.(sym_no)
   in
-  Array.iteri add_object objects;
-  let text = text_section # content in
-  let data = data_section # content in
-  let bss_size = !bss_offset in
+  f
+
+let link padding (objects, index, unresolved_symbols) = 
+  let offsets, text, data, bss_size = concat padding objects in
+  let lookup = find_object_and_symbol (index, objects) in
   let textlen = Bytes.length text and datalen = Bytes.length data in
   let adjust_value objno section value = 
     let open Aout in
-    let {text; data; _}, _ = objects.(objno) in
+    let {text; data; _} = objects.(objno) in
     let text_base, data_base, bss_base = offsets.(objno) in
     let obj_textlen = String.length text and obj_datalen = String.length data in
     match section with
@@ -69,10 +91,7 @@ let link padding (objects, index, unresolved_symbols) =
   in
   let get_symbol_typ_value sym_name =
     let open Aout in
-    let objno = Hashtbl.find index sym_name in
-    let obj, obj_index = objects.(objno) in
-    let symno = Hashtbl.find obj_index sym_name in
-    let {typ; value; _} = obj.symbols.(symno) in
+    let objno, {typ; value; _} = lookup sym_name in
     match typ with
     | Type (_, section) -> typ, adjust_value objno section value
     | Stab _ -> assert false
@@ -95,7 +114,7 @@ let link padding (objects, index, unresolved_symbols) =
     Array.of_list (List.stable_sort (fun s1 s2 -> Pervasives.compare s1.Aout.name s2.Aout.name) (globals @ externals))
   in
   let new_symbols_index = Aout.build_index new_symbols in
-  let relocate_object i ({Aout.text_reloc; data_reloc; symbols; _}, _) = 
+  let relocate_object i {Aout.text_reloc; data_reloc; symbols; _} = 
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
       let reloc_address = Int32.to_int base_offset + reloc_address in
       let open Aout in
