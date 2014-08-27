@@ -64,14 +64,12 @@ let concat padding objects =
 let find_object_and_symbol (index, objects) =
   let open Aout in
   let indices = Array.map (fun {symbols; _} -> build_index symbols) objects in
-  let f sym_name =
+  function sym_name ->
     let obj_no = Hashtbl.find index sym_name in
     let obj = objects.(obj_no) in
     let obj_index = indices.(obj_no) in
     let sym_no = Hashtbl.find obj_index sym_name in
     obj_no, obj.symbols.(sym_no)
-  in
-  f
 
 let link padding (objects, index, unresolved_symbols) = 
   let offsets, text, data, bss_size = concat padding objects in
