@@ -5,6 +5,11 @@ type padding =
   | DoublePhrase
   | QuadPhrase
 
+type segment_type =
+  | Relocatable
+  | Contiguous
+  | Absolute of Int32.t
+
 let pad padding offset =
   let f n = (offset + n) land (lnot n) in
   match padding with

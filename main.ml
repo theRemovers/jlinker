@@ -1,10 +1,5 @@
 let ffailwith fmt = Printf.ksprintf failwith fmt
 
-type segment_type =
-  | Relocatable
-  | Contiguous
-  | Absolute of Int32.t
-
 let text_segment_type = ref None
 let data_segment_type = ref None
 let bss_segment_type = ref None
@@ -29,14 +24,15 @@ let files = ref []
 let get_files () = List.rev !files
 
 let get_segment_type msg = function
-  | "r" | "R" -> Relocatable
-  | "x" | "X" -> Contiguous
+  | "r" | "R" -> Linker.Relocatable
+  | "x" | "X" -> Linker.Contiguous
   | n ->
       let n = Format.sprintf "0x%s" n in
-      try Absolute (Int32.of_string n)
+      try Linker.Absolute (Int32.of_string n)
       with Failure _ -> ffailwith "Error in %s-segment address: cannot parse %s" msg n
 
 let set_text_segment_type x =
+  let open Linker in
   match x with
   | Relocatable
   | Absolute _ -> text_segment_type := Some x
