@@ -102,7 +102,7 @@ let adjust_symbol_value (objects, offsets) textlen datalen objno section value =
   | Absolute -> value
   | Undefined -> assert false
 
-let link padding (objects, index, unresolved_symbols) = 
+let partial_link padding (objects, index, unresolved_symbols) = 
   let offsets, text, data, bss_size = concat padding objects in
   let lookup = find_object_and_symbol (index, objects) in
   let textlen = Bytes.length text and datalen = Bytes.length data in
