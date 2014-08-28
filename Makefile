@@ -16,6 +16,7 @@ SRCMLI+=log.mli
 SRCMLI+=problem.mli
 SRCMLI+=linker.mli
 SRCMLI+=alcyon.mli
+SRCMLI+=coff.mli
 
 SRCML=fileExt.ml stringExt.ml listExt.ml hashtblExt.ml bytes.ml emit.ml
 SRCML+=version.ml
@@ -25,6 +26,7 @@ SRCML+=log.ml
 SRCML+=problem.ml
 SRCML+=linker.ml
 SRCML+=alcyon.ml
+SRCML+=coff.ml
 SRCML+=main.ml
 
 SRCS=$(SRCML) $(SRCMLI)

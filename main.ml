@@ -165,7 +165,7 @@ let main () =
        let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
        let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
        let abs_obj = Linker.make_absolute layout obj in
-       if !coff_executable then failwith "todo"
+       if !coff_executable then Coff.save_object (get_output_name ".cof") abs_obj
        else 
 	 let include_header = not !noheaderflag in
 	 Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
