@@ -126,7 +126,7 @@ let solve problem =
 	       if Hashtbl.mem selected_tbl idx then
 		 let obj = content.(j).Archive.data in
 		 let obj_sum = objs_sum.(j) in
-		 ({obj with Aout.filename = filename ^ "/" ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
+		 ({obj with Aout.filename = filename ^ Filename.dir_sep ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
 	       else extract (j+1)
 	     end else []
 	   in
