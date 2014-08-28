@@ -20,6 +20,11 @@ let partial_link = ref None
 
 let output_name = ref "output"
 
+let get_output_name ext = 
+  let name = !output_name in
+  if FileExt.has_extension name then name
+  else name ^ ext
+
 let lib_directories = ref []
 
 let get_path () = List.rev !lib_directories
@@ -158,12 +163,15 @@ let main () =
        | Some info ->
 	  let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
 	  let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
-	  let _ = Linker.make_absolute info obj in
-	  failwith "todo"
+	  let abs_obj = Linker.make_absolute info obj in
+	  if !coff_executable then failwith "todo"
+	  else 
+	    let include_header = not !noheaderflag in
+	    Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
        end
     | Some resolve_common_symbols -> 
        let obj = Linker.partial_link ~resolve_common_symbols !section_padding solution in
-       Aout.save_object !output_name obj
+       Aout.save_object (get_output_name ".o") obj
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)

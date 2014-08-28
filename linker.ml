@@ -286,7 +286,7 @@ let get_addr (text_info, data_info, bss_info) ~text_len ~data_len =
   in
   text_address, data_address, bss_address
 
-type absolute_linked = 
+type absolute_object = 
     {
       text_address: Int32.t option;
       data_address: Int32.t option;
