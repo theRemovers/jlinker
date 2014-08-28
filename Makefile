@@ -31,9 +31,9 @@ SRCML+=main.ml
 
 SRCS=$(SRCML) $(SRCMLI)
 
-PROJECT=linker
+PROJECT=jlinker
 
-EXTRA=README Makefile
+EXTRA=README.md Makefile
 
 LIBS=
 
