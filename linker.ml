@@ -286,19 +286,15 @@ let get_addr (text_info, data_info, bss_info) ~text_len ~data_len =
   in
   text_address, data_address, bss_address
 
-type absolute_linked =
+type absolute_linked = 
     {
       text_address: Int32.t option;
-      text: string;
-      text_reloc: Aout.reloc_info list;
       data_address: Int32.t option;
-      data: string;
-      data_reloc: Aout.reloc_info list;
       bss_address: Int32.t option;
-      bss_size: int;
+      obj: Aout.object_params;
     }
 
-let make_absolute layout {Aout.text; data; bss_size; text_reloc; data_reloc; symbols; _} = 
+let make_absolute layout ({Aout.text; data; text_reloc; data_reloc; symbols; _} as obj) = 
   let text = Bytes.of_string text in
   let data = Bytes.of_string data in
   let text_len = Int32.of_int (Bytes.length text) in
@@ -327,20 +323,23 @@ let make_absolute layout {Aout.text; data; bss_size; text_reloc; data_reloc; sym
        | Type (_, Data) -> update_or_keep data_address (Int32.sub value text_len)
        | Type (_, Bss) -> update_or_keep bss_address (Int32.sub value bss_offset)
        | Type (_, Absolute) -> update value; None
-       | Type (_, Undefined) -> Format.ksprintf failwith "Symbol %s is still undefined" name
+       | Type (_, Undefined) -> Format.ksprintf failwith "Symbol %s is still undefined." name
        | Stab _ -> assert false
        end
   in
   let text_reloc = ListExt.choose (reloc text) text_reloc in
   let data_reloc = ListExt.choose (reloc data) data_reloc in
+  let new_obj = 
+    { obj with
+      Aout.text = Bytes.to_string text;
+      data = Bytes.to_string data;
+      text_reloc;
+      data_reloc }
+  in
   {
     text_address;
-    text = Bytes.to_string text;
-    text_reloc;
     data_address;
-    data = Bytes.to_string data;
-    data_reloc;
     bss_address;
-    bss_size
+    obj = new_obj;
   }
 

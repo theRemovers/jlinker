@@ -158,7 +158,7 @@ let main () =
        | Some info ->
 	  let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
 	  let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
-	  let result = Linker.make_absolute info obj in
+	  let _ = Linker.make_absolute info obj in
 	  failwith "todo"
        end
     | Some resolve_common_symbols -> 
