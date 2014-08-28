@@ -156,22 +156,20 @@ let main () =
     Arg.parse (mk_spec()) do_file info_string;
     let objects = Array.of_list (List.map process_file (get_files())) in
     let solution = Problem.solve objects in
-    match !partial_link with
-    | None -> 
-       begin match absolute_link () with
-       | None -> failwith "Don't know what to do"
-       | Some info ->
-	  let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
-	  let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
-	  let abs_obj = Linker.make_absolute info obj in
-	  if !coff_executable then failwith "todo"
-	  else 
-	    let include_header = not !noheaderflag in
-	    Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
-       end
-    | Some resolve_common_symbols -> 
+    match !partial_link, absolute_link() with
+    | None, None -> failwith "Don't know what to do"
+    | Some resolve_common_symbols, None -> 
        let obj = Linker.partial_link ~resolve_common_symbols !section_padding solution in
        Aout.save_object (get_output_name ".o") obj
+    | None, Some layout ->
+       let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
+       let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
+       let abs_obj = Linker.make_absolute layout obj in
+       if !coff_executable then failwith "todo"
+       else 
+	 let include_header = not !noheaderflag in
+	 Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
+    | Some _, Some _ -> failwith "Partial-linking and absolute linking are two mutually exclusive modes." 
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)
