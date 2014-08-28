@@ -71,6 +71,8 @@ val section_of_type: symbol_type -> section
 
 val build_index: symbol array -> (string, int) Hashtbl.t
 
-val load_object: string -> string -> object_params option
+val load_object: filename:string -> string -> object_params option
+
+val data_object: filename:string -> symbol:string -> string -> object_params
 
 val save_object: string -> object_params -> unit

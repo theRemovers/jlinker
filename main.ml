@@ -115,7 +115,7 @@ let mk_spec () =
 
 let load_archive archname content =
   let f ({Archive.filename; data; _} as file) =
-    match Aout.load_object filename data with
+    match Aout.load_object ~filename data with
     | None -> ffailwith "unsupported file in archive %s" archname
     | Some obj -> {file with Archive.data = obj}
   in
@@ -126,7 +126,7 @@ let load_archive archname content =
 let process_file = function
   | Object_or_archive filename ->
       let content = FileExt.load filename in
-      begin match Aout.load_object filename content with
+      begin match Aout.load_object ~filename content with
       | None ->
           begin match load_archive filename content with
           | None -> ffailwith "Cannot read file %s (unknown type)" filename
@@ -134,7 +134,9 @@ let process_file = function
           end
       | Some obj -> Problem.Object obj
       end
-  | Binary (_symbol, _filename) -> failwith "todo"
+  | Binary (symbol, filename) -> 
+     let content = FileExt.load filename in
+     Problem.Object (Aout.data_object ~filename ~symbol content)
 
 let main () =
   try

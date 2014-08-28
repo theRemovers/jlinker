@@ -223,7 +223,7 @@ let build_index symbols =
   Array.iteri f symbols;
   tbl
 
-let load_object filename content =
+let load_object ~filename content =
   let mach = StringExt.read_word content 0 in
   let magic = StringExt.read_word content 2 in
   match machine_of_int32 mach, magic_of_int32 magic with
@@ -262,6 +262,29 @@ let load_object filename content =
           symbols;
 	}
   | _ -> None
+
+let data_object ~filename ~symbol data = 
+  let start_name = "_" ^ symbol in
+  let end_name = start_name ^ "x" in
+  let mk_symbol name value = 
+    { name;
+      typ = Type (External, Data); 
+      other = 0;
+      desc = 0;
+      value }
+  in
+  {
+    filename;
+    machine = M68000;
+    magic = OMAGIC;
+    text = "";
+    data;
+    bss_size = 0;
+    entry = 0l;
+    text_reloc = [];
+    data_reloc = [];
+    symbols = [| mk_symbol start_name 0l; mk_symbol end_name (Int32.of_int (String.length data)) |]
+  }
 
 let emit_byte oc v = 
   output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
