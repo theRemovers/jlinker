@@ -64,7 +64,9 @@ let concat padding objects common_symbols =
     data_section # add_content data;
     bss_section # add_content bss_size;
   done;
-  let bss_offset = text_section # offset + data_section # offset in
+  let text_length = text_section # offset in
+  let data_length = data_section # offset in
+  let bss_offset = text_length + data_length in
   let common_tbl = 
     let tbl = Hashtbl.create 16 in
     List.iter (fun (sym_name, size) -> 
@@ -74,7 +76,16 @@ let concat padding objects common_symbols =
 	       bss_section # add_content (Int32.to_int size)) common_symbols;
     tbl
   in
-  offsets, text_section # content, data_section # content, bss_section # offset, common_tbl
+  let bss_length = bss_section # offset in
+  let other_tbl = 
+    let tbl = Hashtbl.create 16 in
+    let open Aout in
+    Hashtbl.replace tbl "_TEXT_E" (Text, (Int32.of_int text_length));
+    Hashtbl.replace tbl "_DATA_E" (Data, (Int32.of_int (data_length + text_length)));
+    Hashtbl.replace tbl "_BSS_E" (Bss, (Int32.of_int (bss_length + bss_offset)));
+    tbl
+  in
+  offsets, text_section # content, data_section # content, bss_length, common_tbl, other_tbl
 
 let find_object_and_symbol (index, objects) =
   let open Aout in
@@ -88,7 +99,7 @@ let find_object_and_symbol (index, objects) =
 
 let mk_symbol typ (name, value) = {Aout.name; typ; value; other = 0; desc = 0}
 
-let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl = 
+let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_tbl = 
   let globals = 
     let f name = 
       let typ, value = find_symbol name in
@@ -107,7 +118,10 @@ let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl =
 	let value = Hashtbl.find common_tbl name in
 	mk_symbol Aout.(Type (External, Bss)) (name, value)
       with Not_found ->
-	mk_symbol Aout.(Type (External, Undefined)) (name, value)
+	try 
+	  let section, value = Hashtbl.find extra_tbl name in
+	  mk_symbol Aout.(Type (External, section)) (name, value)
+	with Not_found -> mk_symbol Aout.(Type (External, Undefined)) (name, value)
     in
     List.map f unresolved_symbols
   in
@@ -126,14 +140,25 @@ let adjust_symbol_value (objects, offsets) textlen datalen objno section value =
   | Absolute -> value
   | Undefined -> assert false
 
-let partial_link ~resolve_common_symbols padding (objects, index, unresolved_symbols) = 
+let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects, index, unresolved_symbols) = 
   let common_symbols =
     if resolve_common_symbols then
       let is_common (_, value) = value <> 0l in
       List.filter is_common unresolved_symbols
     else []
   in
-  let offsets, text, data, bss_size, common_tbl = concat padding objects common_symbols in
+  let offsets, text, data, bss_size, common_tbl, other_tbl = concat padding objects common_symbols in
+  let extra_tbl = 
+    let tbl = Hashtbl.create 16 in
+    let f x = 
+      try
+	let y = Hashtbl.find other_tbl x in
+	Hashtbl.replace tbl x y
+      with Not_found -> ()
+    in
+    List.iter f extra_symbols;
+    tbl
+  in
   let lookup = find_object_and_symbol (index, objects) in
   let textlen = Bytes.length text and datalen = Bytes.length data in
   let adjust_value = adjust_symbol_value (objects, offsets) textlen datalen in
@@ -144,7 +169,7 @@ let partial_link ~resolve_common_symbols padding (objects, index, unresolved_sym
     | Type (_, section) -> typ, adjust_value objno section value
     | Stab _ -> assert false
   in
-  let new_symbols = build_symbol_table find_symbol (index, unresolved_symbols) common_tbl in
+  let new_symbols = build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_tbl in
   let new_symbols_index = Aout.build_index new_symbols in
   let relocate_object i {Aout.text_reloc; data_reloc; symbols; _} = 
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
@@ -183,9 +208,16 @@ let partial_link ~resolve_common_symbols padding (objects, index, unresolved_sym
 	    let value = Hashtbl.find common_tbl name in
 	    update value;
 	    Some {info with reloc_address; reloc_base = Section Bss}
+	 | Type (External, Undefined) when Hashtbl.mem extra_tbl name ->
+	    assert (not (Hashtbl.mem index name));
+	    assert (not (Hashtbl.mem common_tbl name));
+	    let section, value = Hashtbl.find extra_tbl name in
+	    update value;
+	    Some {info with reloc_address; reloc_base = Section section}
 	 | Type (External, Undefined) ->
 	    assert (not (Hashtbl.mem index name));
 	    assert (not (Hashtbl.mem common_tbl name));
+	    assert (not (Hashtbl.mem extra_tbl name));
 	    let symno = Hashtbl.find new_symbols_index name in
 	    Some {info with reloc_address; reloc_base = Symbol symno}
 	 | Type (Local, Undefined) -> assert false
