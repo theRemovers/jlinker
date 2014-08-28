@@ -286,22 +286,8 @@ let data_object ~filename ~symbol data =
     symbols = [| mk_symbol start_name 0l; mk_symbol end_name (Int32.of_int (String.length data)) |]
   }
 
-let emit_byte oc v = 
-  output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
-
-let emit_word oc v = 
-  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
-  output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
-
-let emit_long oc v = 
-  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 24) 0xffl)));
-  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 16) 0xffl)));
-  output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
-  output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
-
-let emit_string oc s = output_string oc s
-
 let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptable; relative; copy} = 
+  let open Emit in
   emit_long oc (Int32.of_int reloc_address);
   let set_flag b n = if b then 1 lsl n else 0 in
   let flags = set_flag pcrel 7 in
@@ -320,6 +306,7 @@ let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptabl
   emit_long oc data
 
 let emit_symbols oc symbols = 
+  let open Emit in
   let n = Array.length symbols in
   let index = ref 4 in
   for i = 0 to n-1 do
@@ -339,6 +326,7 @@ let emit_symbols oc symbols =
   done
 
 let save_object filename {filename = _; machine; magic; text; data; bss_size; entry; symbols; text_reloc; data_reloc} = 
+  let open Emit in
   let oc = open_out_bin filename in
   emit_word oc (int32_of_machine machine);
   emit_word oc (int32_of_magic magic);
