@@ -4,6 +4,13 @@ let text_segment_type = ref None
 let data_segment_type = ref None
 let bss_segment_type = ref None
 
+let absolute_link () =
+  match !text_segment_type, !data_segment_type, !bss_segment_type with
+  | None, _, _ -> None
+  | _, None, _ -> assert false
+  | _, _, None -> assert false
+  | Some text, Some data, Some bss -> Some (text, data, bss)
+
 let section_padding = ref Linker.Phrase (* phrase *)
 
 let coff_executable = ref false
@@ -143,13 +150,19 @@ let main () =
     init_lib_directories();
     Arg.parse (mk_spec()) do_file info_string;
     let objects = Array.of_list (List.map process_file (get_files())) in
-    let solution, index, unresolved_symbols = Problem.solve objects in
-    Array.iter (function {Aout.filename; _} -> Printf.printf "Keeping %s\n" filename) solution;
-    List.iter (function (sym_name, value) -> Printf.printf "Symbol %s [%ld] is unresolved\n" sym_name value) unresolved_symbols;
+    let solution = Problem.solve objects in
     match !partial_link with
-    | None -> failwith "todo"
+    | None -> 
+       begin match absolute_link () with
+       | None -> failwith "Don't know what to do"
+       | Some info ->
+	  let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
+	  let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
+	  let result = Linker.make_absolute info obj in
+	  failwith "todo"
+       end
     | Some resolve_common_symbols -> 
-       let obj = Linker.partial_link ~resolve_common_symbols !section_padding (solution, index, unresolved_symbols) in
+       let obj = Linker.partial_link ~resolve_common_symbols !section_padding solution in
        Aout.save_object !output_name obj
   with
   | Failure msg -> Log.error msg

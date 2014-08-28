@@ -140,6 +140,21 @@ let adjust_symbol_value (objects, offsets) textlen datalen objno section value =
   | Absolute -> value
   | Undefined -> assert false
 
+let check_flags ~pcrel ~size = 
+  match pcrel, size with
+  | false, Aout.Long -> ()
+  | true, _ 
+  | _, (Aout.Byte | Aout.Word) -> failwith "unsupported size/pcrel"
+
+let update ~reloc_address ~copy content shift = 
+  let value = Bytes.read_long content reloc_address in
+  if copy then 
+    let new_value = swap_words (Int32.add (swap_words value) shift) in
+    Bytes.write_long content reloc_address new_value
+  else
+    let new_value = Int32.add value shift in
+    Bytes.write_long content reloc_address new_value
+
 let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects, index, unresolved_symbols) = 
   let common_symbols =
     if resolve_common_symbols then
@@ -175,21 +190,8 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
       let reloc_address = Int32.to_int base_offset + reloc_address in
       let open Aout in
-      let () =
-	match pcrel, size with
-	| false, Long -> ()
-	| true, _ 
-	| _, (Byte | Word) -> failwith "unsupported size/pcrel"
-      in
-      let update shift = 
-	let value = Bytes.read_long content reloc_address in
-	if copy then 
-	  let new_value = swap_words (Int32.add (swap_words value) shift) in
-	  Bytes.write_long content reloc_address new_value
-	else
-	  let new_value = Int32.add value shift in
-	  Bytes.write_long content reloc_address new_value
-      in
+      check_flags ~pcrel ~size;
+      let update = update ~reloc_address ~copy content in
       match reloc_base with
       | Symbol no -> 
 	 let {name; typ; _} = symbols.(no) in
@@ -254,3 +256,91 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
     data_reloc;
     symbols = new_symbols;
   }
+
+let get_addr (text_info, data_info, bss_info) ~text_len ~data_len = 
+  let text_address = 
+    match text_info with
+    | Relocatable -> None
+    | Absolute addr -> Some addr
+    | Contiguous -> assert false
+  in
+  let data_address = 
+    match data_info with
+    | Relocatable -> None
+    | Absolute addr -> Some addr
+    | Contiguous -> 
+       begin match text_address with
+       | None -> None
+       | Some addr -> Some (Int32.add addr text_len)
+       end
+  in
+  let bss_address = 
+    match bss_info with
+    | Relocatable -> None
+    | Absolute addr -> Some addr
+    | Contiguous ->
+       begin match data_address with
+       | None -> None
+       | Some addr -> Some (Int32.add addr data_len)
+       end
+  in
+  text_address, data_address, bss_address
+
+type absolute_linked =
+    {
+      text_address: Int32.t option;
+      text: string;
+      text_reloc: Aout.reloc_info list;
+      data_address: Int32.t option;
+      data: string;
+      data_reloc: Aout.reloc_info list;
+      bss_address: Int32.t option;
+      bss_size: int;
+    }
+
+let make_absolute layout {Aout.text; data; bss_size; text_reloc; data_reloc; symbols; _} = 
+  let text = Bytes.of_string text in
+  let data = Bytes.of_string data in
+  let text_len = Int32.of_int (Bytes.length text) in
+  let data_len = Int32.of_int (Bytes.length data) in
+  let text_address, data_address, bss_address = get_addr layout ~text_len ~data_len in
+  let bss_offset = Int32.add text_len data_len in
+  let reloc content ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) = 
+    let open Aout in
+    check_flags ~pcrel ~size;
+    let update = update ~reloc_address ~copy content in
+    let update_or_keep addr offset = 
+      match addr with
+      | None -> Some info
+      | Some addr -> update (Int32.add addr offset); None
+    in
+    match reloc_base with
+    | Section Text -> update_or_keep text_address 0l
+    | Section Data -> update_or_keep data_address (Int32.neg text_len)
+    | Section Bss -> update_or_keep bss_address (Int32.neg bss_offset)
+    | Section Absolute 
+    | Section Undefined -> assert false
+    | Symbol no -> 
+       let {name; typ; value; _} = symbols.(no) in
+       begin match typ with
+       | Type (_, Text) -> update_or_keep text_address value
+       | Type (_, Data) -> update_or_keep data_address (Int32.sub value text_len)
+       | Type (_, Bss) -> update_or_keep bss_address (Int32.sub value bss_offset)
+       | Type (_, Absolute) -> update value; None
+       | Type (_, Undefined) -> Format.ksprintf failwith "Symbol %s is still undefined" name
+       | Stab _ -> assert false
+       end
+  in
+  let text_reloc = ListExt.choose (reloc text) text_reloc in
+  let data_reloc = ListExt.choose (reloc data) data_reloc in
+  {
+    text_address;
+    text = Bytes.to_string text;
+    text_reloc;
+    data_address;
+    data = Bytes.to_string data;
+    data_reloc;
+    bss_address;
+    bss_size
+  }
+
