@@ -1,6 +1,12 @@
+	ifdef	CROSS
+OCAMLOPT=i686-w64-mingw32-ocamlopt
+OCAMLC=i686-w64-mingw32-ocamlc
+OCAMLDEP=i686-w64-mingw32-ocamldep
+	else
 OCAMLOPT=ocamlopt
 OCAMLC=ocamlc
 OCAMLDEP=ocamldep
+	endif
 
 INCL=
 
