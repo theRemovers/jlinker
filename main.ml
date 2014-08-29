@@ -95,6 +95,9 @@ let info_string =
   let prelude = "Linker by Seb/The Removers (version "^(Version.version)^")" in
   prelude
 
+let args_of_file fname = 
+  Array.of_list (Sys.argv.(0) :: (ListExt.concat_map (StringExt.split ' ') (FileExt.all_lines fname)))
+		
 let rec mk_spec () =
   let open Arg in
   let current_incbin = ref None in
@@ -121,9 +124,12 @@ let rec mk_spec () =
    Tuple [String (fun s -> set_text_segment_type (get_segment_type "text" s));
           String (fun s -> data_segment_type := Some (get_segment_type "data" s));
           String (fun s -> bss_segment_type := Some (get_segment_type "bss" s))],
-   "<text> <data> <bss> output absolute file (hex value: segment address, r: relocatable segment, x: contiguous segment)";
+   "<text> <data> <bss> output absolute file\n"^
+   "                          hex value: segment address,\n"^
+   "                          r: relocatable segment,\n"^
+   "                          x: contiguous segment";
 
-   "-c", String (fun s -> parse_args (Array.of_list (Sys.argv.(0) :: (ListExt.concat_map (StringExt.split ' ') (FileExt.all_lines s))))), "<fname> add content of <fname> to command line";
+   "-c", String (fun s -> parse_args (args_of_file s)), "<fname> add content of <fname> to command line";
    
    "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
 
@@ -147,8 +153,10 @@ let rec mk_spec () =
    "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
   ]
 and parse_args args = 
-  Arg.parse_argv ~current:(ref 0) args (mk_spec()) do_file info_string
-
+  try Arg.parse_argv ~current:(ref 0) args (mk_spec()) do_file info_string
+  with Arg.Bad msg -> Printf.eprintf "%s" msg; exit 2
+     | Arg.Help msg -> Printf.printf "%s" msg; exit 0
+		 
 let load_archive archname content =
   let f ({Archive.filename; data; _} as file) =
     match Aout.load_object ~filename data with
