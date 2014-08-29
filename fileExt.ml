@@ -60,3 +60,15 @@ let load filename =
   with End_of_file ->
     close_in ic;
     Buffer.contents buf
+
+let all_lines filename = 
+  let ic = open_in filename in
+  let rec aux accu = 
+    try 
+      let l = input_line ic in
+      aux (l :: accu)
+    with End_of_file -> List.rev accu
+  in
+  let lines = aux [] in
+  close_in ic;
+  lines

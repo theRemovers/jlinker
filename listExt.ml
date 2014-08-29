@@ -30,3 +30,9 @@ let rec choose f = function
      | None -> choose f xs
      | Some y -> y :: (choose f xs)
      end
+
+let rec concat_map f = function
+  | [] -> []
+  | x :: xs -> f x @ (concat_map f xs)
+
+  

@@ -95,7 +95,7 @@ let info_string =
   let prelude = "Linker by Seb/The Removers (version "^(Version.version)^")" in
   prelude
 
-let mk_spec () =
+let rec mk_spec () =
   let current_incbin = ref None in
   let open Arg in
   ["-a",
@@ -104,6 +104,8 @@ let mk_spec () =
           String (fun s -> bss_segment_type := Some (get_segment_type "bss" s))],
    "<text> <data> <bss> output absolute file (hex value: segment address, r: relocatable segment, x: contiguous segment)";
 
+   "-c", String (fun s -> parse_args (Array.of_list (Sys.argv.(0) :: (ListExt.concat_map (StringExt.split ' ') (FileExt.all_lines s))))), "<fname> add content of <fname> to command line";
+   
    "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
 
    "-i",
@@ -142,6 +144,8 @@ let mk_spec () =
    "-w", Unit (fun () -> Log.set_warning_enabled true), "show linker warnings";
    "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
   ]
+and parse_args args = 
+  Arg.parse_argv ~current:(ref 0) args (mk_spec()) do_file info_string
 
 let load_archive archname content =
   let f ({Archive.filename; data; _} as file) =
@@ -171,7 +175,7 @@ let process_file = function
 let main () =
   try
     init_lib_directories();
-    Arg.parse (mk_spec()) do_file info_string;
+    parse_args Sys.argv;
     let objects = Array.of_list (List.map process_file (get_files())) in
     let solution = Problem.solve objects in
     match !partial_link, absolute_link() with

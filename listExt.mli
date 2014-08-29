@@ -19,3 +19,5 @@
 val init: int -> (int -> 'a) -> 'a list
 
 val choose: ('a -> 'b option) -> 'a list -> 'b list
+
+val concat_map: ('a -> 'b list) -> 'a list -> 'b list
