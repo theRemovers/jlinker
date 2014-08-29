@@ -214,9 +214,10 @@ let main () =
     init_lib_directories();
     parse_args Sys.argv;
     let objects = Array.of_list (ListExt.concat_map process_file (get_files())) in
+    if Array.length objects = 0 then failwith "Nothing to do...";
     let solution = Problem.solve objects in
     match !partial_link, absolute_link() with
-    | None, None -> failwith "Don't know what to do"
+    | None, None -> failwith "Don't know what to do..."
     | Some resolve_common_symbols, None -> 
        let obj = Linker.partial_link ~resolve_common_symbols !section_padding solution in
        Aout.save_object (get_output_name ".o") obj
