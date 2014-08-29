@@ -96,8 +96,27 @@ let info_string =
   prelude
 
 let rec mk_spec () =
-  let current_incbin = ref None in
   let open Arg in
+  let current_incbin = ref None in
+  let incbin_spec = 
+    Tuple [String
+             (fun filename ->
+              let path = get_path() in
+              try
+                let real_filename = FileExt.find ~path filename in
+                Log.message "Binary file %s found: %s" filename real_filename;
+                current_incbin := Some real_filename
+              with Not_found ->
+                ffailwith "Cannot find binary file %s [path = %s]" filename (String.concat ", " path));
+           String
+             (fun symbol ->
+              match !current_incbin with
+              | None -> assert false
+              | Some filename ->
+                 Log.message "Defining symbol %s for file %s" symbol filename;
+                 files := Binary (symbol, filename) :: !files;
+                 current_incbin := None)]
+  in
   ["-a",
    Tuple [String (fun s -> set_text_segment_type (get_segment_type "text" s));
           String (fun s -> data_segment_type := Some (get_segment_type "data" s));
@@ -108,25 +127,8 @@ let rec mk_spec () =
    
    "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
 
-   "-i",
-   Tuple [String
-            (fun filename ->
-              let path = get_path() in
-              try
-                let real_filename = FileExt.find ~path filename in
-                Log.message "Binary file %s found: %s" filename real_filename;
-                current_incbin := Some real_filename
-              with Not_found ->
-                ffailwith "Cannot find binary file %s [path = %s]" filename (String.concat ", " path));
-          String
-            (fun symbol ->
-              match !current_incbin with
-              | None -> assert false
-              | Some filename ->
-                  Log.message "Defining symbol %s for file %s" symbol filename;
-                  files := Binary (symbol, filename) :: !files;
-                  current_incbin := None)],
-   "<fname> <label> incbin <fname> and set <label>";
+   "-i", incbin_spec, "<fname> <label> incbin <fname> and set <label>";
+   "-ii", incbin_spec, "<fname> <label> incbin <fname> and set <label>";
 
    "-n", Set noheaderflag, "output no file header to .abs file";
    "-o", Set_string output_name, "<name> set output name";
