@@ -20,7 +20,7 @@ type machine = M68000 | M68010 | M68020
 
 type magic = OMAGIC
 
-type section = Undefined | Absolute | Text | Data | Bss
+type section = Absolute | Text | Data | Bss
 
 type location = Local | External
 
@@ -41,6 +41,7 @@ type stab_type =
   | LCSYM (* BSS-segment variable with internal linkage *)
 
 type symbol_type =
+  | Undefined
   | Type of location * section
   | Stab of stab_type
 

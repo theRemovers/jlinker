@@ -124,7 +124,7 @@ let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_
       let open Aout in
       match typ with
       | Type (External, (Text | Data | Bss | Absolute)) -> Some (mk_symbol typ (name, value))
-      | Type (External, Undefined) -> assert false
+      | Undefined -> assert false
       | Type (Local, _) -> None
       | Stab _ -> assert false
     in
@@ -139,7 +139,7 @@ let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_
 	try 
 	  let section, value = Hashtbl.find extra_tbl name in
 	  mk_symbol Aout.(Type (External, section)) (name, value)
-	with Not_found -> mk_symbol Aout.(Type (External, Undefined)) (name, value)
+	with Not_found -> mk_symbol Aout.Undefined (name, value)
     in
     List.map f unresolved_symbols
   in
@@ -156,7 +156,6 @@ let adjust_symbol_value (objects, offsets) textlen datalen objno section value =
   | Data -> Int32.add data_base (Int32.add value (Int32.of_int (textlen - obj_textlen)))
   | Bss -> Int32.add bss_base (Int32.add value (Int32.of_int (textlen + datalen - obj_textlen - obj_datalen)))
   | Absolute -> value
-  | Undefined -> assert false
 
 let check_flags ~pcrel ~size = 
   match pcrel, size with
@@ -200,6 +199,7 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
     let objno, {typ; value; _} = lookup sym_name in
     match typ with
     | Type (_, section) -> typ, adjust_value objno section value
+    | Undefined 
     | Stab _ -> assert false
   in
   let new_symbols = build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_tbl in
@@ -214,38 +214,37 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
       | Symbol no -> 
 	 let {name; typ; _} = symbols.(no) in
 	 begin match typ with
-	 | Type (External, Undefined) when Hashtbl.mem index name ->
+	 | Undefined when Hashtbl.mem index name ->
 	    let typ, value = find_symbol name in
 	    update value;
 	    begin match typ with
 	    | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
 	    | Type (_, Absolute) -> None
-	    | Type (_, Undefined) -> assert false
+	    | Undefined
 	    | Stab _ -> assert false
 	    end
-	 | Type (External, Undefined) when Hashtbl.mem common_tbl name ->
+	 | Undefined when Hashtbl.mem common_tbl name ->
 	    assert (not (Hashtbl.mem index name));	    
 	    let value = Hashtbl.find common_tbl name in
 	    update value;
 	    Some {info with reloc_address; reloc_base = Section Bss}
-	 | Type (External, Undefined) when Hashtbl.mem extra_tbl name ->
+	 | Undefined when Hashtbl.mem extra_tbl name ->
 	    assert (not (Hashtbl.mem index name));
 	    assert (not (Hashtbl.mem common_tbl name));
 	    let section, value = Hashtbl.find extra_tbl name in
 	    update value;
 	    Some {info with reloc_address; reloc_base = Section section}
-	 | Type (External, Undefined) ->
+	 | Undefined ->
 	    assert (not (Hashtbl.mem index name));
 	    assert (not (Hashtbl.mem common_tbl name));
 	    assert (not (Hashtbl.mem extra_tbl name));
 	    let symno = Hashtbl.find new_symbols_index name in
 	    Some {info with reloc_address; reloc_base = Symbol symno}
-	 | Type (Local, Undefined) -> assert false
 	 | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
 	 | Stab _ -> assert false
 	 end
       | Section ((Text | Data | Bss) as section) -> update (adjust_value i section 0l); Some {info with reloc_address}
-      | Section (Undefined | Absolute) -> assert false
+      | Section Absolute -> assert false
     in
     let text_base, data_base, _bss_base = offsets.(i) in
     let text_reloc = ListExt.choose (f text text_base) text_reloc in
@@ -332,8 +331,7 @@ let make_absolute layout ({Aout.text; data; text_reloc; data_reloc; symbols; _} 
     | Section Text -> update_or_keep text_address 0l
     | Section Data -> update_or_keep data_address (Int32.neg text_len)
     | Section Bss -> update_or_keep bss_address (Int32.neg bss_offset)
-    | Section Absolute 
-    | Section Undefined -> assert false
+    | Section Absolute -> assert false
     | Symbol no -> 
        let {name; typ; value; _} = symbols.(no) in
        begin match typ with
@@ -341,7 +339,7 @@ let make_absolute layout ({Aout.text; data; text_reloc; data_reloc; symbols; _} 
        | Type (_, Data) -> update_or_keep data_address (Int32.sub value text_len)
        | Type (_, Bss) -> update_or_keep bss_address (Int32.sub value bss_offset)
        | Type (_, Absolute) -> update value; None
-       | Type (_, Undefined) -> Format.ksprintf failwith "Symbol %s is still undefined." name
+       | Undefined -> Format.ksprintf failwith "Symbol %s is still undefined." name
        | Stab _ -> assert false
        end
   in

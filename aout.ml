@@ -20,7 +20,7 @@ type machine = M68000 | M68010 | M68020
 
 type magic = OMAGIC
 
-type section = Undefined | Absolute | Text | Data | Bss
+type section = Absolute | Text | Data | Bss
 
 type location = Local | External
 
@@ -42,6 +42,7 @@ type stab_type =
   | LCSYM (* BSS-segment variable with internal linkage *)
 
 type symbol_type =
+  | Undefined
   | Type of location * section
   | Stab of stab_type
     
@@ -105,8 +106,8 @@ let int32_of_magic = function
   | OMAGIC -> 0o407l
 
 let symbol_type_of_int32 = function
-  | 0l -> Type (Local, Undefined)
-  | 1l -> Type (External, Undefined)
+  (* | 0l -> Undefined (\* local undefined ??? *\) *)
+  | 1l -> Undefined (* global *)
   | 2l -> Type (Local, Absolute)
   | 3l -> Type (External, Absolute)
   | 4l -> Type (Local, Text)
@@ -132,8 +133,7 @@ let symbol_type_of_int32 = function
   | x -> Format.ksprintf failwith "unknown symbol type %ld" x
 
 let int32_of_symbol_type = function
-  | Type (Local, Undefined) -> 0l
-  | Type (External, Undefined) -> 1l
+  | Undefined -> 1l
   | Type (Local, Absolute) -> 2l
   | Type (External, Absolute) -> 3l
   | Type (Local, Text) -> 4l
@@ -158,8 +158,6 @@ let int32_of_symbol_type = function
   | Stab RBRAC -> 0xe0l
 
 let section_of_int32 = function
-  | 0l -> Undefined
-  | 1l -> Undefined
   | 2l -> Absolute
   | 3l -> Absolute
   | 4l -> Text
@@ -171,7 +169,6 @@ let section_of_int32 = function
   | x -> Format.ksprintf failwith "invalid section %ld" x
 
 let int32_of_section = function
-  | Undefined -> 0l
   | Absolute -> 2l
   | Text -> 4l
   | Data -> 6l
@@ -190,6 +187,7 @@ let int_of_size = function
 
 let section_of_type = function
   | Type (_, section) -> section
+  | Undefined 
   | Stab _ -> failwith "section_of_type"
 
 let read_reloc_info (content, base) offset =
@@ -235,6 +233,7 @@ let build_index symbols =
   let tbl = Hashtbl.create (Array.length symbols) in
   let f i {name; typ; _} = 
     match typ with
+    | Undefined
     | Type _ -> Hashtbl.replace tbl name i
     | Stab _ -> ()
   in

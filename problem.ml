@@ -47,9 +47,8 @@ let get_summary problem =
     let open Aout in
     let f no {name; typ; _} =
       match typ with
+      | Undefined -> add_undefined name no
       | Type (External, (Text | Data | Bss | Absolute)) -> add_defined name no
-      | Type (External, Undefined) -> add_undefined name no
-      | Type (Local, Undefined) -> assert false
       | Type (Local, _)
       | Stab _ -> ()
     in
@@ -167,7 +166,7 @@ let solve problem =
 	   try 
 	     let sym_no = Hashtbl.find undef_i sym_name in
 	     let {Aout.typ; value; _} = symbols.(sym_no) in
-	     assert (typ = Aout.(Type (External, Undefined)));
+	     assert (typ = Aout.Undefined);
 	     (sym_name, max current_value value) :: (update_unresolved tl)
 	   with Not_found -> sym :: (update_unresolved tl)
       in
