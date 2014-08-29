@@ -96,7 +96,11 @@ let info_string =
   prelude
 
 let args_of_file fname = 
-  Array.of_list (Sys.argv.(0) :: (ListExt.concat_map (StringExt.split ' ') (FileExt.all_lines fname)))
+  let args = 
+    let f line = List.filter (fun s -> String.length s > 0) (StringExt.split ' ' line) in
+    ListExt.concat_map f (FileExt.all_lines fname)
+  in
+  Array.of_list (Sys.argv.(0) :: args)
 		
 let rec mk_spec () =
   let open Arg in
