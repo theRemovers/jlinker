@@ -127,7 +127,7 @@ let mk_spec () =
    "<fname> <label> incbin <fname> and set <label>";
 
    "-n", Set noheaderflag, "output no file header to .abs file";
-   "-o", String (fun s -> output_name := s), "<name> set output name";
+   "-o", Set_string output_name, "<name> set output name";
 
    "-p", Unit (fun () -> partial_link := Some false), "partial link";
    "-q", Unit (fun () -> partial_link := Some true), "partial link with nailed-down BSS";
