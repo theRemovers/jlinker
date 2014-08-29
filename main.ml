@@ -153,7 +153,7 @@ let rec mk_spec () =
    "-rd", Unit (fun () -> section_padding := Linker.DoublePhrase), "set alignment size to double phrase size (16 bytes)";
    "-rq", Unit (fun () -> section_padding := Linker.QuadPhrase), "set alignment size to quad phrase size (32 bytes)";
 
-   "-v", Unit (fun () -> Log.set_verbose_mode true), "set verbose mode";
+   "-v", Unit Log.increase_verbosity, "increase verbosity level";
    "-w", Unit (fun () -> Log.set_warning_enabled true), "show linker warnings";
 
    "-x", 
@@ -215,7 +215,8 @@ let main () =
     parse_args Sys.argv;
     let objects = Array.of_list (ListExt.concat_map process_file (get_files())) in
     if Array.length objects = 0 then failwith "Nothing to do...";
-    let solution = Problem.solve objects in
+    let ((objects, _index, _unresolved_symbols) as solution) = Problem.solve objects in 
+    Array.iter (fun obj -> Log.message ~verbosity:Log.really_verbose "Keeping object %s" obj.Aout.filename) objects;
     match !partial_link, absolute_link() with
     | None, None -> failwith "Don't know what to do..."
     | Some resolve_common_symbols, None -> 

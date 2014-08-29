@@ -16,12 +16,18 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-let verbose_mode = ref false
+let verbosity_level = ref 0
 let warning_enabled = ref false
 
-let set_verbose_mode b = verbose_mode := b
+type verbosity = int
+
+let verbose = 1
+let really_verbose = 2
+let really_really_verbose = 3
+
+let increase_verbosity () = incr verbosity_level
 let set_warning_enabled b = warning_enabled := b
 
-let message fmt = Printf.ksprintf (fun s -> if !verbose_mode then print_endline s else ()) fmt
+let message ?(verbosity = verbose) fmt = Printf.ksprintf (fun s -> if !verbosity_level >= verbosity then print_endline s else ()) fmt
 let warning fmt = Printf.ksprintf (fun s -> if !warning_enabled then print_endline s else ()) fmt
 let error s = print_endline s; exit 1

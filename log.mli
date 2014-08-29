@@ -16,9 +16,15 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-val set_verbose_mode: bool -> unit
+type verbosity
+
+val verbose: verbosity
+val really_verbose: verbosity
+val really_really_verbose: verbosity
+val increase_verbosity: unit -> unit
+
 val set_warning_enabled: bool -> unit
 
-val message: ('a, unit, string, unit) format4 -> 'a
+val message: ?verbosity:verbosity -> ('a, unit, string, unit) format4 -> 'a
 val warning: ('a, unit, string, unit) format4 -> 'a
 val error:  string -> 'a
