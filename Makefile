@@ -64,6 +64,7 @@ version.ml: Makefile
 	@echo "let date_of_compile=\""`date`"\";;" > $@
 	@echo "let version=\""$(VERSION)"\";;" >> $@
 	@echo "let build_info=\""`uname -msrn`"\";;" >> $@
+	@echo "let revision=\""`git log -1 --format="%h"`"\";;" >> $@
 
 dist: $(SRCS) $(EXTRA)
 	mkdir $(PROJECT)
