@@ -49,6 +49,7 @@ let get_path () = List.rev !lib_directories
 
 type file_type =
   | Object_or_archive of string (* filename *)
+  | Extracted_archive of string (* filename *)
   | Binary of string (* label *) * string (* filename *)
 
 let files = ref []
@@ -154,6 +155,18 @@ let rec mk_spec () =
 
    "-v", Unit (fun () -> Log.set_verbose_mode true), "set verbose mode";
    "-w", Unit (fun () -> Log.set_warning_enabled true), "show linker warnings";
+
+   "-x", 
+   String (fun filename -> 
+	   let path = get_path() in
+	   try
+             let real_filename = FileExt.find ~path ~ext:[".a"] filename in
+             Log.message "Archive file %s found: %s" filename real_filename;
+	     files := Extracted_archive real_filename :: !files
+	   with Not_found ->
+             ffailwith "Cannot find archive file %s [path = %s]" filename (String.concat ", " path)),
+   "<fname> include all objects from archive";
+
    "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
   ]
 and parse_args args = 
@@ -178,19 +191,29 @@ let process_file = function
       | None ->
           begin match load_archive filename content with
           | None -> ffailwith "Cannot read file %s (unknown type)" filename
-          | Some archive -> Problem.Archive archive
+          | Some archive -> [Problem.Archive archive]
           end
-      | Some obj -> Problem.Object obj
+      | Some obj -> [Problem.Object obj]
       end
+  | Extracted_archive filename ->
+     let content = FileExt.load filename in
+     begin match load_archive filename content with
+     | None -> ffailwith "Cannot read archive %s" filename
+     | Some {Archive.filename = archname; content; _} -> 
+	let f {Archive.data = ({Aout.filename; _} as obj); _} = 
+	  Problem.Object {obj with Aout.filename = archname ^ Filename.dir_sep ^ filename}
+	in
+	List.map f (Array.to_list content)
+     end
   | Binary (symbol, filename) -> 
      let content = FileExt.load filename in
-     Problem.Object (Aout.data_object ~filename ~symbol content)
+     [Problem.Object (Aout.data_object ~filename ~symbol content)]
 
 let main () =
   try
     init_lib_directories();
     parse_args Sys.argv;
-    let objects = Array.of_list (List.map process_file (get_files())) in
+    let objects = Array.of_list (ListExt.concat_map process_file (get_files())) in
     let solution = Problem.solve objects in
     match !partial_link, absolute_link() with
     | None, None -> failwith "Don't know what to do"
