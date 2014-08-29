@@ -92,7 +92,7 @@ let init_lib_directories () =
   end
 
 let info_string =
-  let prelude = "Linker by Seb/The Removers (version "^(Version.version)^")" in
+  let prelude = "Atari Jaguar Linker by Seb/The Removers (version "^(Version.version)^")" in
   prelude
 
 let args_of_file fname = 
