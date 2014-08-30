@@ -35,6 +35,4 @@ type layout =
       bss_address: Int32.t option;
     }
 
-val partial_link: ?extra_symbols: string list -> resolve_common_symbols:bool -> padding -> Aout.object_params array * (string, int) Hashtbl.t * (string * Int32.t) list -> Aout.object_params
-
-val make_absolute: segment_type * segment_type * segment_type -> Aout.object_params -> layout * Aout.object_params
+val partial_link: ?layout:segment_type * segment_type * segment_type -> ?extra_symbols: string list -> resolve_common_symbols:bool -> padding -> Aout.object_params array * (string, int) Hashtbl.t * (string * Int32.t) list -> layout * Aout.object_params

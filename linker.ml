@@ -124,7 +124,7 @@ let find_object_and_symbol (index, objects) =
 
 let mk_symbol typ (name, value) = {Aout.name; typ; value; other = 0; desc = 0}
 
-let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_tbl = 
+let build_symbol_table find_symbol (index, unresolved_symbols) extra_tbl = 
   let globals = 
     let f name = 
       let typ, value = find_symbol name in
@@ -140,13 +140,9 @@ let build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_
   let externals = 
     let f (name, value) = 
       try 
-	let value = Hashtbl.find common_tbl name in
-	mk_symbol Aout.(Type (External, Bss)) (name, value)
-      with Not_found ->
-	try 
-	  let section, value = Hashtbl.find extra_tbl name in
-	  mk_symbol Aout.(Type (External, section)) (name, value)
-	with Not_found -> mk_symbol Aout.Undefined (name, value)
+	let section, value = Hashtbl.find extra_tbl name in
+	mk_symbol Aout.(Type (External, section)) (name, value)
+      with Not_found -> mk_symbol Aout.Undefined (name, value)
     in
     List.map f unresolved_symbols
   in
@@ -179,7 +175,36 @@ let update ~reloc_address ~copy content shift =
     let new_value = Int32.add value shift in
     Bytes.write_long content reloc_address new_value
 
-let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects, index, unresolved_symbols) = 
+let get_layout (text_info, data_info, bss_info) ~textlen ~datalen = 
+  let text_address = 
+    match text_info with
+    | Relocatable -> None
+    | Absolute addr -> Some addr
+    | Contiguous -> assert false
+  in
+  let data_address = 
+    match data_info with
+    | Relocatable -> None
+    | Absolute addr -> Some addr
+    | Contiguous -> 
+       begin match text_address with
+       | None -> None
+       | Some addr -> Some (Int32.add addr (Int32.of_int textlen))
+       end
+  in
+  let bss_address = 
+    match bss_info with
+    | Relocatable -> None
+    | Absolute addr -> Some addr
+    | Contiguous ->
+       begin match data_address with
+       | None -> None
+       | Some addr -> Some (Int32.add addr (Int32.of_int datalen))
+       end
+  in
+  {text_address; data_address; bss_address}
+
+let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding (objects, index, unresolved_symbols) = 
   let common_symbols =
     if resolve_common_symbols then
       let is_common (_, value) = value <> 0l in
@@ -187,31 +212,64 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
     else []
   in
   let offsets, text, data, bss_size, common_tbl, other_tbl = concat padding objects common_symbols in
+  let lookup = find_object_and_symbol (index, objects) in
+  let textlen = Bytes.length text and datalen = Bytes.length data in
+  let layout = 
+    match layout with
+    | None -> {text_address = None; data_address = None; bss_address = None}
+    | Some params -> get_layout params ~textlen ~datalen
+  in
+  let adapt_to_layout section value = 
+    let open Aout in
+    match section, layout with
+    | Text, {text_address = Some addr; _} -> Aout.Absolute, Int32.add value addr
+    | Data, {data_address = Some addr; _} -> Absolute, Int32.add value (Int32.sub addr (Int32.of_int textlen))
+    | Bss, {bss_address = Some addr; _} -> Absolute, Int32.add value (Int32.sub addr (Int32.of_int (textlen + datalen)))
+    | Text, {text_address = None; _}
+    | Data, {data_address = None; _}
+    | Bss, {bss_address = None; _}
+    | Absolute, _ -> section, value
+  in
   let extra_tbl = 
     let tbl = Hashtbl.create 16 in
-    let f x = 
-      try
-	let y = Hashtbl.find other_tbl x in
-	Hashtbl.replace tbl x y
+    (* first define extra symbols (eg _TEXT_E, _DATA_E, _BSS_E) *)
+    let f name = 
+      try 
+	let (section, value) = Hashtbl.find other_tbl name in
+	let new_section, new_value = adapt_to_layout section value in
+	Hashtbl.replace tbl name (new_section, new_value)
       with Not_found -> ()
     in
     List.iter f extra_symbols;
+    (* then common symbols (they may replace extra ones) *)
+    let f name value = 
+      let new_section, new_value = adapt_to_layout Aout.Bss value in
+      Hashtbl.replace tbl name (new_section, new_value)
+    in
+    Hashtbl.iter f common_tbl;
     tbl
   in
-  let lookup = find_object_and_symbol (index, objects) in
-  let textlen = Bytes.length text and datalen = Bytes.length data in
   let adjust_value = adjust_symbol_value (objects, offsets) textlen datalen in
   let find_symbol sym_name =
     let open Aout in
     let objno, {typ; value; _} = lookup sym_name in
     match typ with
-    | Type (_, section) -> typ, adjust_value objno section value
+    | Type (loc, section) ->
+       let value = adjust_value objno section value in
+       let new_section, value = adapt_to_layout section value in
+       Type (loc, new_section), value
     | Undefined 
     | Stab _ -> assert false
   in
-  let new_symbols = build_symbol_table find_symbol (index, unresolved_symbols) common_tbl extra_tbl in
+  let new_symbols = build_symbol_table find_symbol (index, unresolved_symbols) extra_tbl in
   let new_symbols_index = Aout.build_index new_symbols in
   let relocate_object i {Aout.text_reloc; data_reloc; symbols; _} = 
+    let return_info section info = 
+      let open Aout in
+      match section with
+      | Text | Data | Bss -> Some info
+      | Absolute -> None
+    in
     let f content base_offset ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) =
       let reloc_address = Int32.to_int base_offset + reloc_address in
       let open Aout in
@@ -230,27 +288,24 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
 	    | Undefined
 	    | Stab _ -> assert false
 	    end
-	 | Undefined when Hashtbl.mem common_tbl name ->
-	    assert (not (Hashtbl.mem index name));	    
-	    let value = Hashtbl.find common_tbl name in
-	    update value;
-	    Some {info with reloc_address; reloc_base = Section Bss}
 	 | Undefined when Hashtbl.mem extra_tbl name ->
 	    assert (not (Hashtbl.mem index name));
-	    assert (not (Hashtbl.mem common_tbl name));
 	    let section, value = Hashtbl.find extra_tbl name in
 	    update value;
-	    Some {info with reloc_address; reloc_base = Section section}
+	    return_info section {info with reloc_address; reloc_base = Section section}
 	 | Undefined ->
 	    assert (not (Hashtbl.mem index name));
-	    assert (not (Hashtbl.mem common_tbl name));
 	    assert (not (Hashtbl.mem extra_tbl name));
 	    let symno = Hashtbl.find new_symbols_index name in
 	    Some {info with reloc_address; reloc_base = Symbol symno}
 	 | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
 	 | Stab _ -> assert false
 	 end
-      | Section ((Text | Data | Bss) as section) -> update (adjust_value i section 0l); Some {info with reloc_address}
+      | Section ((Text | Data | Bss) as section) -> 
+	 let value = adjust_value i section 0l in
+	 let new_section, new_value = adapt_to_layout section value in
+	 update new_value;
+	 return_info new_section {info with reloc_address; reloc_base = Section new_section}
       | Section Absolute -> assert false
     in
     let text_base, data_base, _bss_base = offsets.(i) in
@@ -268,6 +323,7 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
   in
   let text_reloc, data_reloc = relocate 0 in
   let open Aout in
+  layout, 
   {
     filename = "";
     machine = M68000;
@@ -280,76 +336,3 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
     data_reloc;
     symbols = new_symbols;
   }
-
-let get_layout (text_info, data_info, bss_info) ~text_len ~data_len = 
-  let text_address = 
-    match text_info with
-    | Relocatable -> None
-    | Absolute addr -> Some addr
-    | Contiguous -> assert false
-  in
-  let data_address = 
-    match data_info with
-    | Relocatable -> None
-    | Absolute addr -> Some addr
-    | Contiguous -> 
-       begin match text_address with
-       | None -> None
-       | Some addr -> Some (Int32.add addr text_len)
-       end
-  in
-  let bss_address = 
-    match bss_info with
-    | Relocatable -> None
-    | Absolute addr -> Some addr
-    | Contiguous ->
-       begin match data_address with
-       | None -> None
-       | Some addr -> Some (Int32.add addr data_len)
-       end
-  in
-  {text_address; data_address; bss_address}
-
-let make_absolute layout_params ({Aout.text; data; text_reloc; data_reloc; symbols; _} as obj) = 
-  let text = Bytes.of_string text in
-  let data = Bytes.of_string data in
-  let text_len = Int32.of_int (Bytes.length text) in
-  let data_len = Int32.of_int (Bytes.length data) in
-  let ({text_address; data_address; bss_address} as layout) = get_layout layout_params ~text_len ~data_len in
-  let bss_offset = Int32.add text_len data_len in
-  let reloc content ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) = 
-    let open Aout in
-    check_flags ~pcrel ~size;
-    let update = update ~reloc_address ~copy content in
-    let update_or_keep addr offset = 
-      match addr with
-      | None -> Some info
-      | Some addr -> update (Int32.add addr offset); None
-    in
-    match reloc_base with
-    | Section Text -> update_or_keep text_address 0l
-    | Section Data -> update_or_keep data_address (Int32.neg text_len)
-    | Section Bss -> update_or_keep bss_address (Int32.neg bss_offset)
-    | Section Absolute -> assert false
-    | Symbol no -> 
-       let {name; typ; value; _} = symbols.(no) in
-       begin match typ with
-       | Type (_, Text) -> update_or_keep text_address value
-       | Type (_, Data) -> update_or_keep data_address (Int32.sub value text_len)
-       | Type (_, Bss) -> update_or_keep bss_address (Int32.sub value bss_offset)
-       | Type (_, Absolute) -> update value; None
-       | Undefined -> Format.ksprintf failwith "Symbol %s is still undefined." name
-       | Stab _ -> assert false
-       end
-  in
-  let text_reloc = ListExt.choose (reloc text) text_reloc in
-  let data_reloc = ListExt.choose (reloc data) data_reloc in
-  let new_obj = 
-    { obj with
-      Aout.text = Bytes.to_string text;
-      data = Bytes.to_string data;
-      text_reloc;
-      data_reloc }
-  in
-  layout, new_obj
-

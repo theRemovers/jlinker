@@ -217,20 +217,24 @@ let main () =
     if Array.length objects = 0 then failwith "Nothing to do...";
     let ((objects, _index, _unresolved_symbols) as solution) = Problem.solve objects in 
     Array.iter (fun obj -> Log.message ~verbosity:Log.really_verbose "Keeping object %s" obj.Aout.filename) objects;
-    match !partial_link, absolute_link() with
+    let layout = absolute_link() in
+    match !partial_link, layout with
     | None, None -> failwith "Don't know what to do..."
-    | Some resolve_common_symbols, None -> 
-       let obj = Linker.partial_link ~resolve_common_symbols !section_padding solution in
-       Aout.save_object (get_output_name ".o") obj
     | None, Some layout ->
        let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
-       let obj = Linker.partial_link ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
-       let abs_obj = Linker.make_absolute layout obj in
+       let abs_obj = Linker.partial_link ~layout ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
        if !coff_executable then Coff.save_object (get_output_name ".cof") abs_obj
        else 
 	 let include_header = not !noheaderflag in
 	 Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
-    | Some _, Some _ -> failwith "Partial-linking and absolute linking are two mutually exclusive modes." 
+    | Some resolve_common_symbols, (None | Some _) ->
+       let extra_symbols = 
+	 match layout with
+	 | None -> []
+	 | Some _ -> if resolve_common_symbols then ["_TEXT_E"; "_DATA_E"; "_BSS_E"] else []
+       in
+       let _layout, obj = Linker.partial_link ?layout ~extra_symbols ~resolve_common_symbols !section_padding solution in
+       Aout.save_object (get_output_name ".o") obj
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)
