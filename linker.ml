@@ -28,6 +28,13 @@ type segment_type =
   | Contiguous
   | Absolute of Int32.t
 
+type layout = 
+    { 
+      text_address: Int32.t option;
+      data_address: Int32.t option;
+      bss_address: Int32.t option;
+    }
+
 let pad padding offset =
   let f n = (offset + n) land (lnot n) in
   match padding with
@@ -274,7 +281,7 @@ let partial_link ?(extra_symbols = []) ~resolve_common_symbols padding (objects,
     symbols = new_symbols;
   }
 
-let get_addr (text_info, data_info, bss_info) ~text_len ~data_len = 
+let get_layout (text_info, data_info, bss_info) ~text_len ~data_len = 
   let text_address = 
     match text_info with
     | Relocatable -> None
@@ -301,22 +308,14 @@ let get_addr (text_info, data_info, bss_info) ~text_len ~data_len =
        | Some addr -> Some (Int32.add addr data_len)
        end
   in
-  text_address, data_address, bss_address
+  {text_address; data_address; bss_address}
 
-type absolute_object = 
-    {
-      text_address: Int32.t option;
-      data_address: Int32.t option;
-      bss_address: Int32.t option;
-      obj: Aout.object_params;
-    }
-
-let make_absolute layout ({Aout.text; data; text_reloc; data_reloc; symbols; _} as obj) = 
+let make_absolute layout_params ({Aout.text; data; text_reloc; data_reloc; symbols; _} as obj) = 
   let text = Bytes.of_string text in
   let data = Bytes.of_string data in
   let text_len = Int32.of_int (Bytes.length text) in
   let data_len = Int32.of_int (Bytes.length data) in
-  let text_address, data_address, bss_address = get_addr layout ~text_len ~data_len in
+  let ({text_address; data_address; bss_address} as layout) = get_layout layout_params ~text_len ~data_len in
   let bss_offset = Int32.add text_len data_len in
   let reloc content ({Aout.reloc_address; reloc_base; pcrel; size; copy; _} as info) = 
     let open Aout in
@@ -352,10 +351,5 @@ let make_absolute layout ({Aout.text; data; text_reloc; data_reloc; symbols; _} 
       text_reloc;
       data_reloc }
   in
-  {
-    text_address;
-    data_address;
-    bss_address;
-    obj = new_obj;
-  }
+  layout, new_obj
 

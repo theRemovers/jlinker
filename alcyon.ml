@@ -24,7 +24,7 @@ let check_reloc = function
   | [] -> ()
   | _ :: _ -> failwith "unsupported relocation information in Alcyon export"
 
-let save_object filename ~include_header {Linker.text_address; data_address; bss_address; obj = {Aout.text; data; bss_size; text_reloc; data_reloc; _}} =
+let save_object filename ~include_header ({Linker.text_address; data_address; bss_address}, {Aout.text; data; bss_size; text_reloc; data_reloc; _}) =
   let textbase = get_address text_address in
   let database = get_address data_address in
   let bssbase = get_address bss_address in

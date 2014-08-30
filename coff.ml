@@ -29,7 +29,7 @@ let pad_string s =
   if n <= 8 then s ^ (String.make (8-n) '\000')
   else raise (Invalid_argument "pad_string")
 
-let save_object filename {Linker.text_address; data_address; bss_address; obj = {Aout.text; data; bss_size; text_reloc; data_reloc; _}} =
+let save_object filename ({Linker.text_address; data_address; bss_address}, {Aout.text; data; bss_size; text_reloc; data_reloc; _}) =
   let open Emit in
   let oc = open_out_bin filename in
   let textbase = get_address text_address in

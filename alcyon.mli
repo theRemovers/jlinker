@@ -16,4 +16,4 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-val save_object: string -> include_header:bool -> Linker.absolute_object -> unit
+val save_object: string -> include_header:bool -> Linker.layout * Aout.object_params -> unit
