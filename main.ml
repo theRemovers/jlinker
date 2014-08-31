@@ -167,7 +167,7 @@ let rec mk_spec () =
              ffailwith "Cannot find archive file %s [path = %s]" filename (String.concat ", " path)),
    "<fname> include all objects from archive";
 
-   "-y", String (fun s -> lib_directories := StringExt.rev_split ':' s @ !lib_directories), "<dir1:dir2:...> add directories to search path";
+   "-y", String (fun s -> lib_directories := s :: !lib_directories), "<dirname> add directory to search path";
   ]
 and parse_args args = 
   try Arg.parse_argv ~current:(ref 0) args (mk_spec()) do_file info_string
