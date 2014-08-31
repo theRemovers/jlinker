@@ -106,7 +106,7 @@ let int32_of_magic = function
   | OMAGIC -> 0o407l
 
 let symbol_type_of_int32 = function
-  (* | 0l -> Undefined (\* local undefined ??? *\) *)
+  | 0l -> Undefined (* local undefined ??? *)
   | 1l -> Undefined (* global *)
   | 2l -> Type (Local, Absolute)
   | 3l -> Type (External, Absolute)
