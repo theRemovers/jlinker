@@ -82,7 +82,7 @@ dist: $(SRCS) $(EXTRA)
 	$(OCAMLOPT) $(INCL) -c $(OCAMLFLAGS) -o $@ $<
 
 clean:
-	rm -f $(CMI) $(CMO) $(CMX) version.ml $(PROJECT).byte $(PROJECT).native
+	rm -f $(CMI) $(CMO) $(CMX) $(SRCML:.ml=.o) $(SRCML:.ml=.annot) $(SRCML:.ml=.cmi) version.ml $(PROJECT).byte $(PROJECT).native *~
 
 .depend: $(SRCS)
 	$(OCAMLDEP) $(INCL) $(SRCS) > .depend
