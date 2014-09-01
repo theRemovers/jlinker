@@ -83,12 +83,12 @@ let do_file filename =
 let init_lib_directories () =
   begin try
     let s = Sys.getenv "ALNPATH" in
-    lib_directories := StringExt.rev_split ':' s
+    lib_directories := StringExt.rev_split ';' s
   with Not_found -> ()
   end;
   begin try
     let s = Sys.getenv "RLNPATH" in
-    lib_directories := StringExt.rev_split ':' s @ !lib_directories
+    lib_directories := StringExt.rev_split ';' s @ !lib_directories
   with Not_found -> ()
   end
 
