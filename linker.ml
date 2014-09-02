@@ -72,9 +72,10 @@ object
 end
 
 let swap_words v = 
-  let low = Int32.logand v 0xffffl in
-  let high = Int32.logand (Int32.shift_right_logical v 16) 0xffffl in
-  Int32.logor (Int32.shift_left low 16) high
+  let open Int32 in
+  let low = logand v 0xffffl in
+  let high = shift_right_logical v 16 in
+  logor (shift_left low 16) high
 
 let concat padding objects common_symbols = 
   let n = Array.length objects in
