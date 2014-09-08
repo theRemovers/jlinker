@@ -168,13 +168,13 @@ let check_flags ~pcrel ~size =
   | _, (Aout.Byte | Aout.Word) -> failwith "unsupported size/pcrel"
 
 let update ~reloc_address ~copy content shift = 
-  let value = Bytes.read_long content reloc_address in
+  let value = BytesExt.read_long content reloc_address in
   if copy then 
     let new_value = swap_words (Int32.add (swap_words value) shift) in
-    Bytes.write_long content reloc_address new_value
+    BytesExt.write_long content reloc_address new_value
   else
     let new_value = Int32.add value shift in
-    Bytes.write_long content reloc_address new_value
+    BytesExt.write_long content reloc_address new_value
 
 let get_layout (text_info, data_info, bss_info) ~textlen ~datalen = 
   let text_address = 

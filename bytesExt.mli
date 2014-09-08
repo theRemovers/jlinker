@@ -16,12 +16,10 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-type bytes = string
+val read_byte: Bytes.bytes -> int -> Int32.t
+val read_word: Bytes.bytes -> int -> Int32.t
+val read_long: Bytes.bytes -> int -> Int32.t
 
-let length s = String.length s
-
-let get s offset = s.[offset]
-let set s offset c = s.[offset] <- c
-
-let to_string s = s
-let of_string s = s
+val write_byte: Bytes.bytes -> int -> Int32.t -> unit
+val write_word: Bytes.bytes -> int -> Int32.t -> unit
+val write_long: Bytes.bytes -> int -> Int32.t -> unit

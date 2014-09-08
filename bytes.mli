@@ -6,30 +6,22 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-type t
+type bytes
 
-val length: t -> int
+val length: bytes -> int
 
-val get: t -> int -> char
-val set: t -> int -> char -> unit
+val get: bytes -> int -> char
+val set: bytes -> int -> char -> unit
 
-val to_string: t -> string
-val of_string: string -> t
-
-val read_byte: t -> int -> Int32.t
-val read_word: t -> int -> Int32.t
-val read_long: t -> int -> Int32.t
-
-val write_byte: t -> int -> Int32.t -> unit
-val write_word: t -> int -> Int32.t -> unit
-val write_long: t -> int -> Int32.t -> unit
+val to_string: bytes -> string
+val of_string: string -> bytes
