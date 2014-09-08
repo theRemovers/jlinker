@@ -6,12 +6,12 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
@@ -24,7 +24,7 @@ type section = Absolute | Text | Data | Bss
 
 type location = Local | External
 
-type stab_type = 
+type stab_type =
   | SO (* name of source file name *)
   | SOL (* name of sub-source file *)
   | SLINE (* line number in text segment *)
@@ -46,21 +46,21 @@ type symbol_type =
   | Stab of stab_type
 
 type symbol =
-    { 
+    {
       name: string;
       typ: symbol_type;
       other: int;
       desc: int;
-      value: Int32.t; 
+      value: Int32.t;
     }
 
 type size = Byte | Word | Long
 
-type reloc_base = 
-  | Symbol of int 
+type reloc_base =
+  | Symbol of int
   | Section of section
 
-type reloc_info = 
+type reloc_info =
     {
       reloc_address: int;
       reloc_base: reloc_base;
@@ -73,7 +73,7 @@ type reloc_info =
     }
 
 type object_params =
-    { 
+    {
       filename: string;
       machine: machine;
       magic: magic;

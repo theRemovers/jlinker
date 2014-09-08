@@ -6,12 +6,12 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
@@ -24,7 +24,7 @@ let check_reloc = function
   | [] -> ()
   | _ :: _ -> failwith "unsupported relocation information in Absolute COFF export"
 
-let pad_string s = 
+let pad_string s =
   let n = String.length s in
   if n <= 8 then s ^ (String.make (8-n) '\000')
   else raise (Invalid_argument "pad_string")

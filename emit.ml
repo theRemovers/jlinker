@@ -6,24 +6,24 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-let emit_byte oc v = 
+let emit_byte oc v =
   output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
 
-let emit_word oc v = 
+let emit_word oc v =
   output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));
   output_char oc (Char.chr (Int32.to_int (Int32.logand v 0xffl)))
 
-let emit_long oc v = 
+let emit_long oc v =
   output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 24) 0xffl)));
   output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 16) 0xffl)));
   output_char oc (Char.chr (Int32.to_int (Int32.logand (Int32.shift_right_logical v 8) 0xffl)));

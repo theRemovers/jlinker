@@ -6,23 +6,23 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-type 'a input = 
+type 'a input =
   | Object of 'a
   | Archive of 'a Archive.t
 
-let build_index ?(warn = fun _ -> ()) summary = 
+let build_index ?(warn = fun _ -> ()) summary =
   let index = Hashtbl.create 16 in
-  let add_index sym_name no = 
+  let add_index sym_name no =
     if Hashtbl.mem index sym_name then warn sym_name
     else Hashtbl.add index sym_name no
   in
@@ -30,8 +30,8 @@ let build_index ?(warn = fun _ -> ()) summary =
   Array.iteri f summary;
   index
 
-let get_summary problem = 
-  let process_obj {Aout.symbols; filename; _} = 
+let get_summary problem =
+  let process_obj {Aout.symbols; filename; _} =
     let defined = Hashtbl.create 16 in
     let undefined = Hashtbl.create 16 in
     let add_defined name no =
@@ -39,7 +39,7 @@ let get_summary problem =
       if Hashtbl.mem defined name then Log.warning "Symbol %s is ambiguous in object %s" name filename
       else Hashtbl.add defined name no
     in
-    let add_undefined name no = 
+    let add_undefined name no =
       assert (not (Hashtbl.mem defined name));
       if Hashtbl.mem undefined name then Log.warning "Symbol %s is ambiguous in object %s" name filename
       else Hashtbl.add undefined name no
@@ -57,7 +57,7 @@ let get_summary problem =
   in
   let f = function
     | Object obj -> `Object (process_obj obj)
-    | Archive {Archive.content; filename; _} -> 
+    | Archive {Archive.content; filename; _} ->
        let open Archive in
        let summary = Array.map (fun {data; _} -> process_obj data) content in
        let warn sym_name = Log.warning "Symbol %s multiply defined in archive %s" sym_name filename in
@@ -92,9 +92,9 @@ let solve problem =
     Hashtbl.iter (fun sym_name _ -> mark_undefined sym_name) undefined
   in
   let summary = get_summary problem in
-  let archives = 
+  let archives =
     let n = Array.length summary in
-    let rec aux i = 
+    let rec aux i =
       if i < n then begin
 	match summary.(i) with
 	| `Object obj -> add_object obj; aux (i+1)
@@ -110,7 +110,7 @@ let solve problem =
 	 begin match summary.(archno) with
 	 | `Object _ -> assert false
 	 | `Archive (def, objs) ->
-	    try 
+	    try
 	      let no = Hashtbl.find def sym_name in
 	      archno, no, objs.(no)
 	    with Not_found -> aux tl
@@ -129,7 +129,7 @@ let solve problem =
       add_object obj
     with Not_found -> mark_unresolved sym_name
   done;
-  let solution_and_summary = 
+  let solution_and_summary =
     let n = Array.length problem in
     let rec aux i =
       if i < n then begin
@@ -158,12 +158,12 @@ let solve problem =
   let summary = Array.map snd solution_and_summary in
   let index = build_index summary in
   let unresolved_symbols =
-    let f i (_def_i, undef_i) unresolved_symbols = 
+    let f i (_def_i, undef_i) unresolved_symbols =
       let {Aout.symbols; _} = solution.(i) in
       let rec update_unresolved = function
 	| [] -> []
 	| ((sym_name, current_value) as sym) :: tl ->
-	   try 
+	   try
 	     let sym_no = Hashtbl.find undef_i sym_name in
 	     let {Aout.typ; value; _} = symbols.(sym_no) in
 	     assert (typ = Aout.Undefined);

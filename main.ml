@@ -6,12 +6,12 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
@@ -38,7 +38,7 @@ let partial_link = ref None
 
 let output_name = ref "output"
 
-let get_output_name ext = 
+let get_output_name ext =
   let name = !output_name in
   if FileExt.has_extension name then name
   else name ^ ext
@@ -96,17 +96,17 @@ let info_string =
   let prelude = "Atari Jaguar Linker by Seb/The Removers (rev. "^(Version.revision)^")" in
   prelude
 
-let args_of_file fname = 
-  let args = 
+let args_of_file fname =
+  let args =
     let f line = List.filter (fun s -> String.length s > 0) (StringExt.split ' ' line) in
     ListExt.concat_map f (FileExt.all_lines fname)
   in
   Array.of_list (Sys.argv.(0) :: args)
-		
+
 let rec mk_spec () =
   let open Arg in
   let current_incbin = ref None in
-  let incbin_spec = 
+  let incbin_spec =
     Tuple [String
              (fun filename ->
               let path = get_path() in
@@ -135,7 +135,7 @@ let rec mk_spec () =
    "                          x: contiguous segment";
 
    "-c", String (fun s -> parse_args (args_of_file s)), "<fname> add content of <fname> to command line";
-   
+
    "-e", Unit (fun () -> coff_executable := true), "output COF absolute file";
 
    "-i", incbin_spec, "<fname> <label> incbin <fname> and set <label>";
@@ -156,8 +156,8 @@ let rec mk_spec () =
    "-v", Unit Log.increase_verbosity, "increase verbosity level";
    "-w", Unit (fun () -> Log.set_warning_enabled true), "show linker warnings";
 
-   "-x", 
-   String (fun filename -> 
+   "-x",
+   String (fun filename ->
 	   let path = get_path() in
 	   try
              let real_filename = FileExt.find ~path ~ext:[".a"] filename in
@@ -169,11 +169,11 @@ let rec mk_spec () =
 
    "-y", String (fun s -> lib_directories := s :: !lib_directories), "<dirname> add directory to search path";
   ]
-and parse_args args = 
+and parse_args args =
   try Arg.parse_argv ~current:(ref 0) args (mk_spec()) do_file info_string
   with Arg.Bad msg -> Printf.eprintf "%s" msg; exit 2
      | Arg.Help msg -> Printf.printf "%s" msg; exit 0
-		 
+
 let load_archive archname content =
   let f ({Archive.filename; data; _} as file) =
     match Aout.load_object ~filename data with
@@ -199,13 +199,13 @@ let process_file = function
      let content = FileExt.load filename in
      begin match load_archive filename content with
      | None -> ffailwith "Cannot read archive %s" filename
-     | Some {Archive.filename = archname; content; _} -> 
-	let f {Archive.data = ({Aout.filename; _} as obj); _} = 
+     | Some {Archive.filename = archname; content; _} ->
+	let f {Archive.data = ({Aout.filename; _} as obj); _} =
 	  Problem.Object {obj with Aout.filename = archname ^ Filename.dir_sep ^ filename}
 	in
 	List.map f (Array.to_list content)
      end
-  | Binary (symbol, filename) -> 
+  | Binary (symbol, filename) ->
      let content = FileExt.load filename in
      [Problem.Object (Aout.data_object ~filename ~symbol content)]
 
@@ -215,7 +215,7 @@ let main () =
     parse_args Sys.argv;
     let objects = Array.of_list (ListExt.concat_map process_file (get_files())) in
     if Array.length objects = 0 then failwith "Nothing to do...";
-    let ((objects, _index, _unresolved_symbols) as solution) = Problem.solve objects in 
+    let ((objects, _index, _unresolved_symbols) as solution) = Problem.solve objects in
     Array.iter (fun obj -> Log.message ~verbosity:Log.really_verbose "Keeping object %s" obj.Aout.filename) objects;
     let layout = absolute_link() in
     match !partial_link, layout with
@@ -224,11 +224,11 @@ let main () =
        let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
        let abs_obj = Linker.partial_link ~layout ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
        if !coff_executable then Coff.save_object (get_output_name ".cof") abs_obj
-       else 
+       else
 	 let include_header = not !noheaderflag in
 	 Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
     | Some resolve_common_symbols, (None | Some _) ->
-       let extra_symbols = 
+       let extra_symbols =
 	 match layout with
 	 | None -> []
 	 | Some _ -> if resolve_common_symbols then ["_TEXT_E"; "_DATA_E"; "_BSS_E"] else []

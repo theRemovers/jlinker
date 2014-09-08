@@ -6,12 +6,12 @@
   it under the terms of the GNU General Public License as published by
   the Free Software Foundation, either version 3 of the License, or
   (at your option) any later version.
-  
+
   This program is distributed in the hope that it will be useful,
   but WITHOUT ANY WARRANTY; without even the implied warranty of
   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
   GNU General Public License for more details.
-  
+
   You should have received a copy of the GNU General Public License
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
@@ -24,7 +24,7 @@ type section = Absolute | Text | Data | Bss
 
 type location = Local | External
 
-type stab_type = 
+type stab_type =
     (* see stab.def *)
   | SO (* name of source file name *)
   | SOL (* name of sub-source file *)
@@ -45,23 +45,23 @@ type symbol_type =
   | Undefined
   | Type of location * section
   | Stab of stab_type
-    
+
 type symbol =
-    { 
+    {
       name: string;
       typ: symbol_type;
       other: int;
       desc: int;
-      value: Int32.t; 
+      value: Int32.t;
     }
 
 type size = Byte | Word | Long
 
-type reloc_base = 
-  | Symbol of int 
+type reloc_base =
+  | Symbol of int
   | Section of section
 
-type reloc_info = 
+type reloc_info =
     {
       reloc_address: int;
       reloc_base: reloc_base;
@@ -74,7 +74,7 @@ type reloc_info =
     }
 
 type object_params =
-    { 
+    {
       filename: string;
       machine: machine;
       magic: magic;
@@ -187,7 +187,7 @@ let int_of_size = function
 
 let section_of_type = function
   | Type (_, section) -> section
-  | Undefined 
+  | Undefined
   | Stab _ -> failwith "section_of_type"
 
 let read_reloc_info (content, base) offset =
@@ -200,7 +200,7 @@ let read_reloc_info (content, base) offset =
   let pcrel = get_flag 7 in
   let extern = get_flag 4 in
   let size = size_of_int ((flags land 0x60) lsr 5) in
-  let reloc_base = 
+  let reloc_base =
     if not extern then Section (section_of_int32 reloc_base)
     else Symbol (Int32.to_int reloc_base)
   in
@@ -229,9 +229,9 @@ let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let value = StringExt.read_long symbol_table (offset + 8) in
   {name; typ; other; desc; value}
 
-let build_index symbols = 
+let build_index symbols =
   let tbl = Hashtbl.create (Array.length symbols) in
-  let f i {name; typ; _} = 
+  let f i {name; typ; _} =
     match typ with
     | Undefined
     | Type _ -> Hashtbl.replace tbl name i
@@ -280,12 +280,12 @@ let load_object ~filename content =
 	}
   | _ -> None
 
-let data_object ~filename ~symbol data = 
+let data_object ~filename ~symbol data =
   let start_name = "_" ^ symbol in
   let end_name = start_name ^ "x" in
-  let mk_symbol name value = 
+  let mk_symbol name value =
     { name;
-      typ = Type (External, Data); 
+      typ = Type (External, Data);
       other = 0;
       desc = 0;
       value }
@@ -303,7 +303,7 @@ let data_object ~filename ~symbol data =
     symbols = [| mk_symbol start_name 0l; mk_symbol end_name (Int32.of_int (String.length data)) |]
   }
 
-let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptable; relative; copy} = 
+let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptable; relative; copy} =
   let open Emit in
   emit_long oc (Int32.of_int reloc_address);
   let set_flag b n = if b then 1 lsl n else 0 in
@@ -313,7 +313,7 @@ let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptabl
   let flags = flags lor (set_flag jmptable 2) in
   let flags = flags lor (set_flag relative 1) in
   let flags = flags lor (set_flag copy 0) in
-  let extern, reloc_base = 
+  let extern, reloc_base =
     match reloc_base with
     | Section section -> false, int32_of_section section
     | Symbol no -> true, Int32.of_int no
@@ -322,7 +322,7 @@ let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptabl
   let data = Int32.logor (Int32.shift_left reloc_base 8) (Int32.of_int (flags land 0xff)) in
   emit_long oc data
 
-let emit_symbols oc symbols = 
+let emit_symbols oc symbols =
   let open Emit in
   let n = Array.length symbols in
   let index = ref 4 in
@@ -342,7 +342,7 @@ let emit_symbols oc symbols =
     output_char oc '\000'
   done
 
-let save_object filename {filename = _; machine; magic; text; data; bss_size; entry; symbols; text_reloc; data_reloc} = 
+let save_object filename {filename = _; machine; magic; text; data; bss_size; entry; symbols; text_reloc; data_reloc} =
   let open Emit in
   let oc = open_out_bin filename in
   emit_word oc (int32_of_machine machine);
