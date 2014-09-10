@@ -16,10 +16,10 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-val read_byte: Bytes.bytes -> int -> Int32.t
-val read_word: Bytes.bytes -> int -> Int32.t
-val read_long: Bytes.bytes -> int -> Int32.t
+val read_byte: bytes -> int -> Int32.t
+val read_word: bytes -> int -> Int32.t
+val read_long: bytes -> int -> Int32.t
 
-val write_byte: Bytes.bytes -> int -> Int32.t -> unit
-val write_word: Bytes.bytes -> int -> Int32.t -> unit
-val write_long: Bytes.bytes -> int -> Int32.t -> unit
+val write_byte: bytes -> int -> Int32.t -> unit
+val write_word: bytes -> int -> Int32.t -> unit
+val write_long: bytes -> int -> Int32.t -> unit
