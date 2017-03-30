@@ -1,6 +1,6 @@
 (*
   Atari Jaguar Removers' Linker
-  Copyright (C) 2014 Seb/The Removers (SebRmv@jagware.org)
+  Copyright (C) 2014-2017 Seb/The Removers (SebRmv@jagware.org)
 
   This program is free software: you can redistribute it and/or modify
   it under the terms of the GNU General Public License as published by
