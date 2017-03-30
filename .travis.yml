@@ -1,4 +1,6 @@
-language: c
+language: ocaml
 before_install:
   - sudo apt-get -qq update
   - sudo apt-get install -y ocaml
+install: make
+
