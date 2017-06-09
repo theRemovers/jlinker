@@ -11,7 +11,7 @@ OCAMLDEP=ocamldep
 INCL=
 
 #OCAMLNLDFLAGS = -ccopt -static
-OCAMLFLAGS=-unsafe -annot -warn-error +a -w +a-42-45 -safe-string
+OCAMLFLAGS=-unsafe -bin-annot -warn-error +a -w +a-42-45 -safe-string
 
 VERSION=0.0.1
 
@@ -82,7 +82,7 @@ dist: $(SRCS) $(EXTRA)
 	$(OCAMLOPT) $(INCL) -c $(OCAMLFLAGS) -o $@ $<
 
 clean:
-	rm -f $(CMI) $(CMO) $(CMX) $(SRCML:.ml=.o) $(SRCML:.ml=.annot) $(SRCML:.ml=.cmi) version.ml $(PROJECT).byte $(PROJECT).native *~
+	rm -f $(CMI) $(CMO) $(CMX) $(SRCML:.ml=.o) $(SRCML:.ml=.annot) $(SRCML:.ml=.cmi) $(SRCML:.ml=.cmt) $(SRCML:.ml=.cmti) version.ml $(PROJECT).byte $(PROJECT).native *~
 
 .depend: $(SRCS)
 	$(OCAMLDEP) $(INCL) $(SRCS) > .depend
