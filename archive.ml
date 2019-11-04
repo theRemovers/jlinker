@@ -53,6 +53,9 @@ let load_archive archname content =
                   `ArFileNames data
               | "__.SYMDEF       " ->
                   `SymDef data
+              | "/               "
+              | "//              " ->
+                  `Unsupported
               | _ ->
                   `RegularFile
                     { filename;
@@ -89,6 +92,7 @@ let load_archive archname content =
                 in
                 extended_filenames, ({file with filename} :: content)
             | `SymDef _ -> extended_filenames, content
+            | `Unsupported -> extended_filenames, content
           in
           read_files extended_filenames content next_offset
         else List.rev content

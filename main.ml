@@ -177,7 +177,7 @@ and parse_args args =
 let load_archive archname content =
   let f ({Archive.filename; data; _} as file) =
     match Aout.load_object ~filename data with
-    | None -> ffailwith "unsupported file in archive %s" archname
+    | None -> ffailwith "unsupported file in archive %s: %S" archname filename
     | Some obj -> {file with Archive.data = obj}
   in
   match Archive.load_archive archname content with
