@@ -147,7 +147,7 @@ let build_symbol_table find_symbol (index, unresolved_symbols) extra_tbl =
     in
     List.map f unresolved_symbols
   in
-  let compare {Aout.typ = typ1; name = name1; _} {Aout.typ = typ2; name = name2; _} = Pervasives.compare (typ1, name1) (typ2, name2) in
+  let compare {Aout.typ = typ1; name = name1; _} {Aout.typ = typ2; name = name2; _} = Stdlib.compare (typ1, name1) (typ2, name2) in
   Array.of_list (List.stable_sort compare (globals @ externals))
 
 let adjust_symbol_value (objects, offsets) textlen datalen objno section value =
