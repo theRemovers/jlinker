@@ -54,6 +54,12 @@ let load_archive archname content =
               | "__.SYMDEF       " ->
                   `SymDef data
               | "/               "
+                (*
+                   format seems to be:
+                   4 bytes: number of entries N
+                   4*N bytes: index of each symbol
+                   N null terminated strings: symbols
+                *)
               | "//              " ->
                   `Unsupported
               | _ ->
