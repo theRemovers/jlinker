@@ -29,18 +29,29 @@ type 'a t =
   { filename: string;
     content: 'a archived_file array; }
 
+let verbosity = Log.really_really_verbose
+
 let load_archive archname content =
+  Log.message ~verbosity "Analysing archive %s" archname;
   let global_header = StringExt.read_substring content 0 8 in
   match global_header with
   | "!<arch>\n" ->
+    Log.message ~verbosity "Header found";
     let pad x = if x mod 2 = 0 then x else x + 1 in
     let read_file offset =
+      Log.message ~verbosity "Read file at offset 0x%08x" offset;
       let filename = StringExt.read_substring content offset 16 in
+      Log.message ~verbosity "Filename: %s" filename;
       let timestamp = StringExt.read_substring content (offset + 16) 12 in
+      Log.message ~verbosity "Timestamp: %s" timestamp;
       let owner_id = StringExt.read_substring content (offset + 28) 6 in
+      Log.message ~verbosity "Owner id: %s" owner_id;
       let group_id = StringExt.read_substring content (offset + 34) 6 in
+      Log.message ~verbosity "Group id: %s" group_id;
       let file_mode = StringExt.read_substring content (offset + 40) 8 in
+      Log.message ~verbosity "File mode: %s" file_mode;
       let data_size = int_of_string (String.trim (StringExt.read_substring content (offset + 48) 10)) in
+      Log.message ~verbosity "Data size: %d" data_size;
       let data_offset = offset + 60 in
       let magic = StringExt.read_word content (offset + 58) in
       match magic with
@@ -76,7 +87,6 @@ let load_archive archname content =
       | _ -> failwith (Format.sprintf "Invalid magic number in archive 0x%04lx" magic)
     in
     let size = String.length content in
-
     let rec read_files extended_filenames content offset =
       if offset < size then
         let next_offset, file = read_file offset in

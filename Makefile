@@ -16,9 +16,9 @@ OCAMLFLAGS=-unsafe -bin-annot -warn-error +a -w +a-42-45 -safe-string
 VERSION=0.0.1
 
 SRCMLI=fileExt.mli stringExt.mli listExt.mli hashtblExt.mli bytesExt.mli emit.mli
-SRCMLI+=archive.mli 
-SRCMLI+=aout.mli 
 SRCMLI+=log.mli
+SRCMLI+=archive.mli
+SRCMLI+=aout.mli
 SRCMLI+=problem.mli
 SRCMLI+=linker.mli
 SRCMLI+=alcyon.mli
@@ -26,9 +26,9 @@ SRCMLI+=coff.mli
 
 SRCML=fileExt.ml stringExt.ml listExt.ml hashtblExt.ml bytesExt.ml emit.ml
 SRCML+=version.ml
+SRCML+=log.ml
 SRCML+=archive.ml
 SRCML+=aout.ml
-SRCML+=log.ml
 SRCML+=problem.ml
 SRCML+=linker.ml
 SRCML+=alcyon.ml
@@ -88,4 +88,3 @@ clean:
 	$(OCAMLDEP) $(INCL) $(SRCS) > .depend
 
 -include .depend
-

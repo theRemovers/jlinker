@@ -98,12 +98,20 @@ let int32_of_machine = function
   | M68010 -> 1l
   | M68020 -> 2l
 
+let string_of_machine = function
+  | M68000 -> "68000"
+  | M68010 -> "68010"
+  | M68020 -> "68020"
+
 let magic_of_int32 = function
   | 0o407l -> Some OMAGIC
   | _ -> None
 
 let int32_of_magic = function
   | OMAGIC -> 0o407l
+
+let string_of_magic = function
+  | OMAGIC -> "OMAGIC"
 
 let symbol_type_of_int32 = function
   | 0l -> Undefined (* local undefined ??? *)
@@ -190,6 +198,8 @@ let section_of_type = function
   | Undefined
   | Stab _ -> failwith "section_of_type"
 
+let verbosity = Log.really_really_verbose
+
 let read_reloc_info (content, base) offset =
   let offset = base + offset in
   let reloc_address = Int32.to_int (StringExt.read_long content offset) in
@@ -241,17 +251,27 @@ let build_index symbols =
   tbl
 
 let load_object ~filename content =
+  Log.message ~verbosity "Loading object %s" filename;
   let mach = StringExt.read_word content 0 in
   let magic = StringExt.read_word content 2 in
   match machine_of_int32 mach, magic_of_int32 magic with
   | Some machine, Some magic ->
+    Log.message ~verbosity "Machine: %s" (string_of_machine machine);
+    Log.message ~verbosity "Magic: %s" (string_of_magic magic);
     let text_size = Int32.to_int (StringExt.read_long content 4) in
+    Log.message ~verbosity "Text size: %d" text_size;
     let data_size = Int32.to_int (StringExt.read_long content 8) in
+    Log.message ~verbosity "Data size: %d" data_size;
     let bss_size = Int32.to_int (StringExt.read_long content 12) in
+    Log.message ~verbosity "BSS size: %d" bss_size;
     let sym_size = Int32.to_int (StringExt.read_long content 16) in
+    Log.message ~verbosity "Symbol size: %d" sym_size;
     let entry = StringExt.read_long content 20 in
+    Log.message ~verbosity "Entry: 0x%08lx" entry;
     let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
+    Log.message ~verbosity "Text reloc size: %d" text_reloc_size;
     let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
+    Log.message ~verbosity "Data reloc size: %d" data_reloc_size;
     let offset = 32 in
     let text = StringExt.read_substring content offset text_size in
     let offset = offset + text_size in
