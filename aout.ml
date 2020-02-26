@@ -283,7 +283,8 @@ let load_object ~filename content =
     let offset = offset + data_reloc_size in
     let base_tbl = offset in
     let offset = offset + sym_size in
-    let _size = StringExt.read_long content offset in
+    (* let _size = StringExt.read_long content offset in *)
+    (* Log.message ~verbosity "Size: %ld" _size; *)
     let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
     Some
       {
