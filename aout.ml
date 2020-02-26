@@ -25,7 +25,7 @@ type section = Absolute | Text | Data | Bss
 type location = Local | External
 
 type stab_type =
-    (* see stab.def *)
+  (* see stab.def *)
   | SO (* name of source file name *)
   | SOL (* name of sub-source file *)
   | SLINE (* line number in text segment *)
@@ -47,13 +47,13 @@ type symbol_type =
   | Stab of stab_type
 
 type symbol =
-    {
-      name: string;
-      typ: symbol_type;
-      other: int;
-      desc: int;
-      value: Int32.t;
-    }
+  {
+    name: string;
+    typ: symbol_type;
+    other: int;
+    desc: int;
+    value: Int32.t;
+  }
 
 type size = Byte | Word | Long
 
@@ -62,30 +62,30 @@ type reloc_base =
   | Section of section
 
 type reloc_info =
-    {
-      reloc_address: int;
-      reloc_base: reloc_base;
-      pcrel: bool;
-      size: size;
-      baserel: bool;
-      jmptable: bool;
-      relative: bool;
-      copy: bool;
-    }
+  {
+    reloc_address: int;
+    reloc_base: reloc_base;
+    pcrel: bool;
+    size: size;
+    baserel: bool;
+    jmptable: bool;
+    relative: bool;
+    copy: bool;
+  }
 
 type object_params =
-    {
-      filename: string;
-      machine: machine;
-      magic: magic;
-      text: string;
-      data: string;
-      bss_size: int;
-      entry: Int32.t;
-      text_reloc: reloc_info list;
-      data_reloc: reloc_info list;
-      symbols: symbol array;
-    }
+  {
+    filename: string;
+    machine: machine;
+    magic: magic;
+    text: string;
+    data: string;
+    bss_size: int;
+    entry: Int32.t;
+    text_reloc: reloc_info list;
+    data_reloc: reloc_info list;
+    symbols: symbol array;
+  }
 
 let machine_of_int32 = function
   | 0l -> Some M68000
@@ -245,39 +245,39 @@ let load_object ~filename content =
   let magic = StringExt.read_word content 2 in
   match machine_of_int32 mach, magic_of_int32 magic with
   | Some machine, Some magic ->
-      let text_size = Int32.to_int (StringExt.read_long content 4) in
-      let data_size = Int32.to_int (StringExt.read_long content 8) in
-      let bss_size = Int32.to_int (StringExt.read_long content 12) in
-      let sym_size = Int32.to_int (StringExt.read_long content 16) in
-      let entry = StringExt.read_long content 20 in
-      let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
-      let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
-      let offset = 32 in
-      let text = StringExt.read_substring content offset text_size in
-      let offset = offset + text_size in
-      let data = StringExt.read_substring content offset data_size in
-      let offset = offset + data_size in
-      let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
-      let offset = offset + text_reloc_size in
-      let data_reloc = ListExt.init (data_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
-      let offset = offset + data_reloc_size in
-      let base_tbl = offset in
-      let offset = offset + sym_size in
-      let _size = StringExt.read_long content offset in
-      let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
-      Some
-	{
-	  filename;
-	  machine;
-	  magic;
-          text;
-          data;
-          bss_size;
-	  entry;
-          text_reloc;
-          data_reloc;
-          symbols;
-	}
+    let text_size = Int32.to_int (StringExt.read_long content 4) in
+    let data_size = Int32.to_int (StringExt.read_long content 8) in
+    let bss_size = Int32.to_int (StringExt.read_long content 12) in
+    let sym_size = Int32.to_int (StringExt.read_long content 16) in
+    let entry = StringExt.read_long content 20 in
+    let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
+    let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
+    let offset = 32 in
+    let text = StringExt.read_substring content offset text_size in
+    let offset = offset + text_size in
+    let data = StringExt.read_substring content offset data_size in
+    let offset = offset + data_size in
+    let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
+    let offset = offset + text_reloc_size in
+    let data_reloc = ListExt.init (data_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
+    let offset = offset + data_reloc_size in
+    let base_tbl = offset in
+    let offset = offset + sym_size in
+    let _size = StringExt.read_long content offset in
+    let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
+    Some
+      {
+	filename;
+	machine;
+	magic;
+        text;
+        data;
+        bss_size;
+	entry;
+        text_reloc;
+        data_reloc;
+        symbols;
+      }
   | _ -> None
 
 let data_object ~filename ~symbol data =

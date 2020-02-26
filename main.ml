@@ -60,9 +60,9 @@ let get_segment_type msg = function
   | "r" | "R" -> Linker.Relocatable
   | "x" | "X" -> Linker.Contiguous
   | n ->
-      let n = Format.sprintf "0x%s" n in
-      try Linker.Absolute (Int32.of_string n)
-      with Failure _ -> ffailwith "Error in %s-segment address: cannot parse %s" msg n
+    let n = Format.sprintf "0x%s" n in
+    try Linker.Absolute (Int32.of_string n)
+    with Failure _ -> ffailwith "Error in %s-segment address: cannot parse %s" msg n
 
 let set_text_segment_type x =
   let open Linker in
@@ -82,14 +82,14 @@ let do_file filename =
 
 let init_lib_directories () =
   begin try
-    let s = Sys.getenv "ALNPATH" in
-    lib_directories := StringExt.rev_split ';' s
-  with Not_found -> ()
+      let s = Sys.getenv "ALNPATH" in
+      lib_directories := StringExt.rev_split ';' s
+    with Not_found -> ()
   end;
   begin try
-    let s = Sys.getenv "RLNPATH" in
-    lib_directories := StringExt.rev_split ';' s @ !lib_directories
-  with Not_found -> ()
+      let s = Sys.getenv "RLNPATH" in
+      lib_directories := StringExt.rev_split ';' s @ !lib_directories
+    with Not_found -> ()
   end
 
 let info_string =
@@ -109,21 +109,21 @@ let rec mk_spec () =
   let incbin_spec =
     Tuple [String
              (fun filename ->
-              let path = get_path() in
-              try
-                let real_filename = FileExt.find ~path filename in
-                Log.message "Binary file %s found: %s" filename real_filename;
-                current_incbin := Some real_filename
-              with Not_found ->
-                ffailwith "Cannot find binary file %s [path = %s]" filename (String.concat ", " path));
+                let path = get_path() in
+                try
+                  let real_filename = FileExt.find ~path filename in
+                  Log.message "Binary file %s found: %s" filename real_filename;
+                  current_incbin := Some real_filename
+                with Not_found ->
+                  ffailwith "Cannot find binary file %s [path = %s]" filename (String.concat ", " path));
            String
              (fun symbol ->
-              match !current_incbin with
-              | None -> assert false
-              | Some filename ->
-                 Log.message "Defining symbol %s for file %s" symbol filename;
-                 files := Binary (symbol, filename) :: !files;
-                 current_incbin := None)]
+                match !current_incbin with
+                | None -> assert false
+                | Some filename ->
+                  Log.message "Defining symbol %s for file %s" symbol filename;
+                  files := Binary (symbol, filename) :: !files;
+                  current_incbin := None)]
   in
   ["-a",
    Tuple [String (fun s -> set_text_segment_type (get_segment_type "text" s));
@@ -158,13 +158,13 @@ let rec mk_spec () =
 
    "-x",
    String (fun filename ->
-	   let path = get_path() in
-	   try
-             let real_filename = FileExt.find ~path ~ext:[".a"] filename in
-             Log.message "Archive file %s found: %s" filename real_filename;
-	     files := Extracted_archive real_filename :: !files
-	   with Not_found ->
-             ffailwith "Cannot find archive file %s [path = %s]" filename (String.concat ", " path)),
+       let path = get_path() in
+       try
+         let real_filename = FileExt.find ~path ~ext:[".a"] filename in
+         Log.message "Archive file %s found: %s" filename real_filename;
+	 files := Extracted_archive real_filename :: !files
+       with Not_found ->
+         ffailwith "Cannot find archive file %s [path = %s]" filename (String.concat ", " path)),
    "<fname> include all objects from archive";
 
    "-y", String (fun s -> lib_directories := s :: !lib_directories), "<dirname> add directory to search path";
@@ -186,28 +186,29 @@ let load_archive archname content =
 
 let process_file = function
   | Object_or_archive filename ->
-      let content = FileExt.load filename in
-      begin match Aout.load_object ~filename content with
+    let content = FileExt.load filename in
+    begin match Aout.load_object ~filename content with
       | None ->
-          begin match load_archive filename content with
+        begin match load_archive filename content with
           | None -> ffailwith "Cannot read file %s (unknown type)" filename
-          | Some archive -> [Problem.Archive archive]
-          end
+          | Some archive ->
+            [Problem.Archive archive]
+        end
       | Some obj -> [Problem.Object obj]
-      end
+    end
   | Extracted_archive filename ->
-     let content = FileExt.load filename in
-     begin match load_archive filename content with
-     | None -> ffailwith "Cannot read archive %s" filename
-     | Some {Archive.filename = archname; content; _} ->
-	let f {Archive.data = ({Aout.filename; _} as obj); _} =
-	  Problem.Object {obj with Aout.filename = archname ^ Filename.dir_sep ^ filename}
-	in
-	List.map f (Array.to_list content)
-     end
+    let content = FileExt.load filename in
+    begin match load_archive filename content with
+      | None -> ffailwith "Cannot read archive %s" filename
+      | Some {Archive.filename = archname; content; _} ->
+        let f {Archive.data = ({Aout.filename; _} as obj); _} =
+          Problem.Object {obj with Aout.filename = archname ^ Filename.dir_sep ^ filename}
+        in
+        List.map f (Array.to_list content)
+    end
   | Binary (symbol, filename) ->
-     let content = FileExt.load filename in
-     [Problem.Object (Aout.data_object ~filename ~symbol content)]
+    let content = FileExt.load filename in
+    [Problem.Object (Aout.data_object ~filename ~symbol content)]
 
 let main () =
   try
@@ -221,20 +222,20 @@ let main () =
     match !partial_link, layout with
     | None, None -> failwith "Don't know what to do..."
     | None, Some layout ->
-       let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
-       let abs_obj = Linker.partial_link ~layout ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
-       if !coff_executable then Coff.save_object (get_output_name ".cof") abs_obj
-       else
-	 let include_header = not !noheaderflag in
-	 Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
+      let extra_symbols = ["_TEXT_E"; "_DATA_E"; "_BSS_E"] in
+      let abs_obj = Linker.partial_link ~layout ~extra_symbols ~resolve_common_symbols:true !section_padding  solution  in
+      if !coff_executable then Coff.save_object (get_output_name ".cof") abs_obj
+      else
+	let include_header = not !noheaderflag in
+	Alcyon.save_object (get_output_name ".abs") ~include_header abs_obj
     | Some resolve_common_symbols, (None | Some _) ->
-       let extra_symbols =
-	 match layout with
-	 | None -> []
-	 | Some _ -> if resolve_common_symbols then ["_TEXT_E"; "_DATA_E"; "_BSS_E"] else []
-       in
-       let _layout, obj = Linker.partial_link ?layout ~extra_symbols ~resolve_common_symbols !section_padding solution in
-       Aout.save_object (get_output_name ".o") obj
+      let extra_symbols =
+	match layout with
+	| None -> []
+	| Some _ -> if resolve_common_symbols then ["_TEXT_E"; "_DATA_E"; "_BSS_E"] else []
+      in
+      let _layout, obj = Linker.partial_link ?layout ~extra_symbols ~resolve_common_symbols !section_padding solution in
+      Aout.save_object (get_output_name ".o") obj
   with
   | Failure msg -> Log.error msg
   | exn -> Log.error (Printexc.to_string exn)

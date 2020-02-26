@@ -29,11 +29,11 @@ type segment_type =
   | Absolute of Int32.t
 
 type layout =
-    {
-      text_address: Int32.t option;
-      data_address: Int32.t option;
-      bss_address: Int32.t option;
-    }
+  {
+    text_address: Int32.t option;
+    data_address: Int32.t option;
+    bss_address: Int32.t option;
+  }
 
 let pad padding offset =
   let f n = (offset + n) land (lnot n) in
@@ -45,31 +45,31 @@ let pad padding offset =
   | QuadPhrase -> f 31
 
 class section padding =
-object(this)
-  val mutable offset = 0
-  val buf = Buffer.create 1024
-  method private pad =
-    let n = pad padding offset - offset in
-    for _i = 0 to n-1 do
-      Buffer.add_char buf '\000'
-    done;
-    offset <- offset + n
-  method add_content data =
-    let n = String.length data in
-    Buffer.add_string buf data;
-    offset <- offset + n;
-    this # pad
-  method offset = offset
-  method content = Bytes.of_string (Buffer.contents buf)
-end
+  object(this)
+    val mutable offset = 0
+    val buf = Buffer.create 1024
+    method private pad =
+      let n = pad padding offset - offset in
+      for _i = 0 to n-1 do
+        Buffer.add_char buf '\000'
+      done;
+      offset <- offset + n
+    method add_content data =
+      let n = String.length data in
+      Buffer.add_string buf data;
+      offset <- offset + n;
+      this # pad
+    method offset = offset
+    method content = Bytes.of_string (Buffer.contents buf)
+  end
 
 class virtual_section padding =
-object
-  val mutable offset = 0
-  method add_content n =
-    offset <- pad padding (offset + n)
-  method offset = offset
-end
+  object
+    val mutable offset = 0
+    method add_content n =
+      offset <- pad padding (offset + n)
+    method offset = offset
+  end
 
 let swap_words v =
   let open Int32 in
@@ -96,10 +96,10 @@ let concat padding objects common_symbols =
   let common_tbl =
     let tbl = Hashtbl.create 16 in
     List.iter (fun (sym_name, size) ->
-	       let offset = bss_section # offset in
-	       let value = Int32.of_int (offset + bss_offset) in
-	       Hashtbl.replace tbl sym_name value;
-	       bss_section # add_content (Int32.to_int size)) common_symbols;
+	let offset = bss_section # offset in
+	let value = Int32.of_int (offset + bss_offset) in
+	Hashtbl.replace tbl sym_name value;
+	bss_section # add_content (Int32.to_int size)) common_symbols;
     tbl
   in
   let bss_length = bss_section # offset in
@@ -188,20 +188,20 @@ let get_layout (text_info, data_info, bss_info) ~textlen ~datalen =
     | Relocatable -> None
     | Absolute addr -> Some addr
     | Contiguous ->
-       begin match text_address with
-       | None -> None
-       | Some addr -> Some (Int32.add addr (Int32.of_int textlen))
-       end
+      begin match text_address with
+        | None -> None
+        | Some addr -> Some (Int32.add addr (Int32.of_int textlen))
+      end
   in
   let bss_address =
     match bss_info with
     | Relocatable -> None
     | Absolute addr -> Some addr
     | Contiguous ->
-       begin match data_address with
-       | None -> None
-       | Some addr -> Some (Int32.add addr (Int32.of_int datalen))
-       end
+      begin match data_address with
+        | None -> None
+        | Some addr -> Some (Int32.add addr (Int32.of_int datalen))
+      end
   in
   {text_address; data_address; bss_address}
 
@@ -256,9 +256,9 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding (
     let objno, {typ; value; _} = lookup sym_name in
     match typ with
     | Type (loc, section) ->
-       let value = adjust_value objno section value in
-       let new_section, value = adapt_to_layout section value in
-       Type (loc, new_section), value
+      let value = adjust_value objno section value in
+      let new_section, value = adapt_to_layout section value in
+      Type (loc, new_section), value
     | Undefined
     | Stab _ -> assert false
   in
@@ -278,35 +278,35 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding (
       let update = update ~reloc_address ~copy content in
       match reloc_base with
       | Symbol no ->
-	 let {name; typ; _} = symbols.(no) in
-	 begin match typ with
-	 | Undefined when Hashtbl.mem index name ->
+	let {name; typ; _} = symbols.(no) in
+	begin match typ with
+	  | Undefined when Hashtbl.mem index name ->
 	    let typ, value = find_symbol name in
 	    update value;
 	    begin match typ with
-	    | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
-	    | Type (_, Absolute) -> None
-	    | Undefined
-	    | Stab _ -> assert false
+	      | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
+	      | Type (_, Absolute) -> None
+	      | Undefined
+	      | Stab _ -> assert false
 	    end
-	 | Undefined when Hashtbl.mem extra_tbl name ->
+	  | Undefined when Hashtbl.mem extra_tbl name ->
 	    assert (not (Hashtbl.mem index name));
 	    let section, value = Hashtbl.find extra_tbl name in
 	    update value;
 	    return_info section {info with reloc_address; reloc_base = Section section}
-	 | Undefined ->
+	  | Undefined ->
 	    assert (not (Hashtbl.mem index name));
 	    assert (not (Hashtbl.mem extra_tbl name));
 	    let symno = Hashtbl.find new_symbols_index name in
 	    Some {info with reloc_address; reloc_base = Symbol symno}
-	 | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
-	 | Stab _ -> assert false
-	 end
+	  | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
+	  | Stab _ -> assert false
+	end
       | Section ((Text | Data | Bss) as section) ->
-	 let value = adjust_value i section 0l in
-	 let new_section, new_value = adapt_to_layout section value in
-	 update new_value;
-	 return_info new_section {info with reloc_address; reloc_base = Section new_section}
+	let value = adjust_value i section 0l in
+	let new_section, new_value = adapt_to_layout section value in
+	update new_value;
+	return_info new_section {info with reloc_address; reloc_base = Section new_section}
       | Section Absolute -> assert false
     in
     let text_base, data_base, _bss_base = offsets.(i) in

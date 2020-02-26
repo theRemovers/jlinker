@@ -30,9 +30,9 @@ let find ?(path = []) ?(ext = []) filename =
       let rec aux = function
         | [] -> raise Not_found
         | ext :: others ->
-            let filename_ext = filename ^ ext in
-            if exists filename_ext then filename_ext
-            else aux others
+          let filename_ext = filename ^ ext in
+          if exists filename_ext then filename_ext
+          else aux others
       in
       aux ext
     else raise Not_found
@@ -43,8 +43,8 @@ let find ?(path = []) ?(ext = []) filename =
       let rec aux = function
         | [] -> raise Not_found
         | dir :: others ->
-            try find_aux (Filename.concat dir filename)
-            with Not_found -> aux others
+          try find_aux (Filename.concat dir filename)
+          with Not_found -> aux others
       in
       aux path
     else raise Not_found

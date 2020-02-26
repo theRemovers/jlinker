@@ -24,9 +24,9 @@ let choose tbl =
     let result = ref None in
     try Hashtbl.iter (fun x _ -> result := Some x; raise Exit) tbl; assert false
     with Exit ->
-      match !result with
-      | None -> assert false
-      | Some x -> x
+    match !result with
+    | None -> assert false
+    | Some x -> x
   end
 
 let keys tbl =

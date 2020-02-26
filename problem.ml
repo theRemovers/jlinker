@@ -58,11 +58,11 @@ let get_summary problem =
   let f = function
     | Object obj -> `Object (process_obj obj)
     | Archive {Archive.content; filename; _} ->
-       let open Archive in
-       let summary = Array.map (fun {data; _} -> process_obj data) content in
-       let warn sym_name = Log.warning "Symbol %s multiply defined in archive %s" sym_name filename in
-       let index = build_index ~warn summary in
-       `Archive (index, summary)
+      let open Archive in
+      let summary = Array.map (fun {data; _} -> process_obj data) content in
+      let warn sym_name = Log.warning "Symbol %s multiply defined in archive %s" sym_name filename in
+      let index = build_index ~warn summary in
+      `Archive (index, summary)
   in
   Array.map f problem
 
@@ -107,14 +107,14 @@ let solve problem =
     let rec aux = function
       | [] -> raise Not_found
       | archno :: tl ->
-	 begin match summary.(archno) with
-	 | `Object _ -> assert false
-	 | `Archive (def, objs) ->
+	begin match summary.(archno) with
+	  | `Object _ -> assert false
+	  | `Archive (def, objs) ->
 	    try
 	      let no = Hashtbl.find def sym_name in
 	      archno, no, objs.(no)
 	    with Not_found -> aux tl
-	 end
+	end
     in
     aux archives
   in
@@ -136,18 +136,18 @@ let solve problem =
         match problem.(i), summary.(i) with
 	| Object obj, `Object obj_sum -> (obj, obj_sum) :: aux (i+1)
 	| Archive {Archive.filename; content; _}, `Archive (_, objs_sum) ->
-	   let n_objs = Array.length content in
-	   let rec extract j =
-	     if j < n_objs then begin
-	       let idx = i, j in
-	       if Hashtbl.mem selected_tbl idx then
-		 let obj = content.(j).Archive.data in
-		 let obj_sum = objs_sum.(j) in
-		 ({obj with Aout.filename = filename ^ Filename.dir_sep ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
-	       else extract (j+1)
-	     end else []
-	   in
-	   (extract 0) @ (aux (i+1))
+	  let n_objs = Array.length content in
+	  let rec extract j =
+	    if j < n_objs then begin
+	      let idx = i, j in
+	      if Hashtbl.mem selected_tbl idx then
+		let obj = content.(j).Archive.data in
+		let obj_sum = objs_sum.(j) in
+		({obj with Aout.filename = filename ^ Filename.dir_sep ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
+	      else extract (j+1)
+	    end else []
+	  in
+	  (extract 0) @ (aux (i+1))
 	| Object _, `Archive _
 	| Archive _, `Object _ -> assert false
       end else []
@@ -163,12 +163,12 @@ let solve problem =
       let rec update_unresolved = function
 	| [] -> []
 	| ((sym_name, current_value) as sym) :: tl ->
-	   try
-	     let sym_no = Hashtbl.find undef_i sym_name in
-	     let {Aout.typ; value; _} = symbols.(sym_no) in
-	     assert (typ = Aout.Undefined);
-	     (sym_name, max current_value value) :: (update_unresolved tl)
-	   with Not_found -> sym :: (update_unresolved tl)
+	  try
+	    let sym_no = Hashtbl.find undef_i sym_name in
+	    let {Aout.typ; value; _} = symbols.(sym_no) in
+	    assert (typ = Aout.Undefined);
+	    (sym_name, max current_value value) :: (update_unresolved tl)
+	  with Not_found -> sym :: (update_unresolved tl)
       in
       update_unresolved unresolved_symbols
     in

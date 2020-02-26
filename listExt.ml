@@ -26,10 +26,10 @@ let init n f =
 let rec choose f = function
   | [] -> []
   | x :: xs ->
-     begin match f x with
-     | None -> choose f xs
-     | Some y -> y :: (choose f xs)
-     end
+    begin match f x with
+      | None -> choose f xs
+      | Some y -> y :: (choose f xs)
+    end
 
 let rec concat_map f = function
   | [] -> []
