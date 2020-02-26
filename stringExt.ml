@@ -36,6 +36,26 @@ let rev_split sep s =
   in
   aux [] 0 0
 
+let trim_start p s =
+  let n = String.length s in
+  let rec aux i =
+    if i < n then
+      if p s.[i] then aux (i + 1)
+      else String.sub s i (n - i)
+    else ""
+  in
+  aux 0
+
+let trim_end p s =
+  let n = String.length s in
+  let rec aux i =
+    if 0 <= i then
+      if p s.[i] then aux (i - 1)
+      else String.sub s 0 (i + 1)
+    else ""
+  in
+  aux (n - 1)
+
 let read_byte s offset =
   let n = String.length s in
   if 0 <= offset && offset < n then Int32.of_int (Char.code s.[offset])

@@ -165,6 +165,37 @@ let int32_of_symbol_type = function
   | Stab LBRAC -> 0xc0l
   | Stab RBRAC -> 0xe0l
 
+let string_of_location = function
+  | Local -> "local"
+  | External -> "external"
+
+let string_of_section = function
+  | Absolute -> "absolute"
+  | Text -> "text"
+  | Data -> "data"
+  | Bss -> "bss"
+
+let string_of_stab = function
+  | SO -> "SO"
+  | SOL -> "SOL"
+  | SLINE -> "SLINE"
+  | OPT -> "OPT"
+  | LSYM -> "LSYM"
+  | BNSYM -> "BNSYM"
+  | FUN -> "FUN"
+  | PSYM -> "PSYM"
+  | LBRAC -> "LBRAC"
+  | RBRAC -> "RBRAC"
+  | RSYM -> "RSYM"
+  | STSYM -> "STSYM"
+  | GSYM -> "GSYM"
+  | LCSYM -> "LCSYM"
+
+let string_of_symbol_type = function
+  | Undefined -> "undefined"
+  | Type (location, section) -> Printf.sprintf "%s %s" (string_of_location location) (string_of_section section)
+  | Stab stab -> string_of_stab stab
+
 let section_of_int32 = function
   | 2l -> Absolute
   | 3l -> Absolute
@@ -233,7 +264,9 @@ let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let offset = base_table + offset in
   let index = Int32.to_int (StringExt.read_long symbol_table offset) in
   let name = StringExt.read_string symbol_names (base_names + index) '\000' in
+  Log.message ~verbosity "Symbol name: %s" name;
   let typ = symbol_type_of_int32 (StringExt.read_byte symbol_table (offset + 4)) in
+  Log.message ~verbosity "Symbol type: %s" (string_of_symbol_type typ);
   let other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
   let desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
   let value = StringExt.read_long symbol_table (offset + 8) in

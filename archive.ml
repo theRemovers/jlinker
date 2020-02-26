@@ -31,6 +31,15 @@ type 'a t =
 
 let verbosity = Log.really_really_verbose
 
+let string_of_timestamp s =
+  try
+    match float_of_string_opt (StringExt.trim_end (function ' ' -> true | _ -> false) s) with
+    | None -> "<unknown>"
+    | Some x ->
+      let {Unix.tm_mday; tm_mon; tm_year; tm_hour; tm_min; tm_sec; _} = Unix.gmtime x in
+      Printf.sprintf "%4d-%02d-%02d %02d:%02d:%02d" (1900 + tm_year) (1 + tm_mon) tm_mday tm_hour tm_min tm_sec
+  with _ -> "<error>"
+
 let load_archive archname content =
   Log.message ~verbosity "Analysing archive %s" archname;
   let global_header = StringExt.read_substring content 0 8 in
@@ -43,7 +52,7 @@ let load_archive archname content =
       let filename = StringExt.read_substring content offset 16 in
       Log.message ~verbosity "Filename: %s" filename;
       let timestamp = StringExt.read_substring content (offset + 16) 12 in
-      Log.message ~verbosity "Timestamp: %s" timestamp;
+      Log.message ~verbosity "Timestamp: %s (%s)" timestamp (string_of_timestamp timestamp);
       let owner_id = StringExt.read_substring content (offset + 28) 6 in
       Log.message ~verbosity "Owner id: %s" owner_id;
       let group_id = StringExt.read_substring content (offset + 34) 6 in

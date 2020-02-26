@@ -41,7 +41,7 @@ PROJECT=jlinker
 
 EXTRA=README.md Makefile
 
-LIBS=
+LIBS=unix
 
 BYTELIBS=$(LIBS:=.cma)
 NATIVELIBS=$(LIBS:=.cmxa)
