@@ -186,27 +186,33 @@ let load_archive archname content =
 
 let process_file = function
   | Object_or_archive filename ->
+    Log.message "Loading object %s" filename;
     let content = FileExt.load filename in
     begin match Aout.load_object ~filename content with
       | None ->
+        Log.message "Loading archive %s" filename;
         begin match load_archive filename content with
           | None -> ffailwith "Cannot read file %s (unknown type)" filename
           | Some archive ->
+            Log.message "Archive %s loaded" filename;
             [Problem.Archive archive]
         end
       | Some obj -> [Problem.Object obj]
     end
   | Extracted_archive filename ->
+    Log.message "Loading archive %s" filename;
     let content = FileExt.load filename in
     begin match load_archive filename content with
       | None -> ffailwith "Cannot read archive %s" filename
       | Some {Archive.filename = archname; content; _} ->
+        Log.message "Archive %s loaded" filename;
         let f {Archive.data = ({Aout.filename; _} as obj); _} =
           Problem.Object {obj with Aout.filename = archname ^ Filename.dir_sep ^ filename}
         in
         List.map f (Array.to_list content)
     end
   | Binary (symbol, filename) ->
+    Log.message "Loading data file %s" filename;
     let content = FileExt.load filename in
     [Problem.Object (Aout.data_object ~filename ~symbol content)]
 
