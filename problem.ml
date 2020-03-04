@@ -96,60 +96,61 @@ let solve problem =
     let n = Array.length summary in
     let rec aux i =
       if i < n then begin
-	match summary.(i) with
-	| `Object obj -> add_object obj; aux (i+1)
-	| `Archive _ -> i :: (aux (i+1))
+        match summary.(i) with
+        | `Object obj -> add_object obj; aux (i+1)
+        | `Archive _ -> i :: (aux (i+1))
       end else []
     in
     aux 0
   in
   let find_symbol sym_name =
     let rec aux = function
-      | [] -> raise Not_found
+      | [] -> None
       | archno :: tl ->
-	begin match summary.(archno) with
-	  | `Object _ -> assert false
-	  | `Archive (def, objs) ->
-	    try
-	      let no = Hashtbl.find def sym_name in
-	      archno, no, objs.(no)
-	    with Not_found -> aux tl
-	end
+        begin match summary.(archno) with
+          | `Object _ -> assert false
+          | `Archive (def, objs) ->
+            begin match Hashtbl.find_opt def sym_name with
+              | None -> aux tl
+              | Some no ->
+                Some (archno, no, objs.(no))
+            end
+        end
     in
     aux archives
   in
   let selected_tbl = Hashtbl.create 16 in
   while Hashtbl.length undefined_tbl > 0 do
     let sym_name = HashtblExt.choose undefined_tbl in
-    try
-      let archno, objno, obj = find_symbol sym_name in
+    match find_symbol sym_name with
+    | None -> mark_unresolved sym_name
+    | Some (archno, objno, obj) ->
       let idx = archno, objno in
       assert (not (Hashtbl.mem selected_tbl idx));
       Hashtbl.replace selected_tbl idx ();
       add_object obj
-    with Not_found -> mark_unresolved sym_name
   done;
   let solution_and_summary =
     let n = Array.length problem in
     let rec aux i =
       if i < n then begin
         match problem.(i), summary.(i) with
-	| Object obj, `Object obj_sum -> (obj, obj_sum) :: aux (i+1)
-	| Archive {Archive.filename; content; _}, `Archive (_, objs_sum) ->
-	  let n_objs = Array.length content in
-	  let rec extract j =
-	    if j < n_objs then begin
-	      let idx = i, j in
-	      if Hashtbl.mem selected_tbl idx then
-		let obj = content.(j).Archive.data in
-		let obj_sum = objs_sum.(j) in
-		({obj with Aout.filename = filename ^ Filename.dir_sep ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
-	      else extract (j+1)
-	    end else []
-	  in
-	  (extract 0) @ (aux (i+1))
-	| Object _, `Archive _
-	| Archive _, `Object _ -> assert false
+        | Object obj, `Object obj_sum -> (obj, obj_sum) :: aux (i+1)
+        | Archive {Archive.filename; content; _}, `Archive (_, objs_sum) ->
+          let n_objs = Array.length content in
+          let rec extract j =
+            if j < n_objs then begin
+              let idx = i, j in
+              if Hashtbl.mem selected_tbl idx then
+                let obj = content.(j).Archive.data in
+                let obj_sum = objs_sum.(j) in
+                ({obj with Aout.filename = filename ^ Filename.dir_sep ^ obj.Aout.filename}, obj_sum) :: (extract (j+1))
+              else extract (j+1)
+            end else []
+          in
+          (extract 0) @ (aux (i+1))
+        | Object _, `Archive _
+        | Archive _, `Object _ -> assert false
       end else []
     in
     Array.of_list (aux 0)
@@ -161,14 +162,15 @@ let solve problem =
     let f i (_def_i, undef_i) unresolved_symbols =
       let {Aout.symbols; _} = solution.(i) in
       let rec update_unresolved = function
-	| [] -> []
-	| ((sym_name, current_value) as sym) :: tl ->
-	  try
-	    let sym_no = Hashtbl.find undef_i sym_name in
-	    let {Aout.typ; value; _} = symbols.(sym_no) in
-	    assert (typ = Aout.Undefined);
-	    (sym_name, max current_value value) :: (update_unresolved tl)
-	  with Not_found -> sym :: (update_unresolved tl)
+        | [] -> []
+        | ((sym_name, current_value) as sym) :: tl ->
+          begin match Hashtbl.find_opt undef_i sym_name with
+            | None -> sym :: (update_unresolved tl)
+            | Some sym_no ->
+              let {Aout.typ; value; _} = symbols.(sym_no) in
+              assert (typ = Aout.Undefined);
+              (sym_name, max current_value value) :: (update_unresolved tl)
+          end
       in
       update_unresolved unresolved_symbols
     in
