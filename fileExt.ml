@@ -25,29 +25,32 @@ let has_extension filename =
 let find ?(path = []) ?(ext = []) filename =
   let has_ext = has_extension filename in
   let find_aux filename =
-    if exists filename then filename
+    if exists filename then Some filename
     else if not has_ext then
       let rec aux = function
-        | [] -> raise Not_found
+        | [] -> None
         | ext :: others ->
           let filename_ext = filename ^ ext in
-          if exists filename_ext then filename_ext
+          if exists filename_ext then Some filename_ext
           else aux others
       in
       aux ext
-    else raise Not_found
+    else None
   in
-  try find_aux filename
-  with Not_found ->
+  match find_aux filename with
+  | None ->
     if Filename.is_implicit filename then
       let rec aux = function
-        | [] -> raise Not_found
+        | [] -> None
         | dir :: others ->
-          try find_aux (Filename.concat dir filename)
-          with Not_found -> aux others
+          begin match find_aux (Filename.concat dir filename) with
+            | None -> aux others
+            | Some filename -> Some filename
+          end
       in
       aux path
-    else raise Not_found
+    else None
+  | Some filename -> Some filename
 
 let load filename =
   let ic = open_in_bin filename in

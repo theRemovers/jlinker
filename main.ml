@@ -61,8 +61,9 @@ let get_segment_type msg = function
   | "x" | "X" -> Linker.Contiguous
   | n ->
     let n = Format.sprintf "0x%s" n in
-    try Linker.Absolute (Int32.of_string n)
-    with Failure _ -> ffailwith "Error in %s-segment address: cannot parse %s" msg n
+    match Int32.of_string_opt n with
+    | None -> ffailwith "Error in %s-segment address: cannot parse %s" msg n
+    | Some n -> Linker.Absolute n
 
 let set_text_segment_type x =
   let open Linker in
@@ -73,23 +74,21 @@ let set_text_segment_type x =
 
 let do_file filename =
   let path = get_path() in
-  try
-    let real_filename = FileExt.find ~path ~ext:[".o"; ".a"] filename in
+  match FileExt.find ~path ~ext:[".o"; ".a"] filename with
+  | None ->
+    ffailwith "Cannot find file %s [search path = %s]" filename (String.concat ", " path)
+  | Some real_filename ->
     Log.message "File %s found: %s" filename real_filename;
     files := Object_or_archive real_filename :: !files
-  with Not_found ->
-    ffailwith "Cannot find file %s [search path = %s]" filename (String.concat ", " path)
 
 let init_lib_directories () =
-  begin try
-      let s = Sys.getenv "ALNPATH" in
-      lib_directories := StringExt.rev_split ';' s
-    with Not_found -> ()
+  begin match Sys.getenv_opt "ALNPATH" with
+    | None -> ()
+    | Some s -> lib_directories := StringExt.rev_split ';' s
   end;
-  begin try
-      let s = Sys.getenv "RLNPATH" in
-      lib_directories := StringExt.rev_split ';' s @ !lib_directories
-    with Not_found -> ()
+  begin match Sys.getenv_opt "RLNPATH" with
+    | None -> ()
+    | Some s -> lib_directories := StringExt.rev_split ';' s @ !lib_directories
   end
 
 let info_string =
@@ -110,12 +109,12 @@ let rec mk_spec () =
     Tuple [String
              (fun filename ->
                 let path = get_path() in
-                try
-                  let real_filename = FileExt.find ~path filename in
+                match FileExt.find ~path filename with
+                | None ->
+                  ffailwith "Cannot find binary file %s [path = %s]" filename (String.concat ", " path)
+                | Some real_filename ->
                   Log.message "Binary file %s found: %s" filename real_filename;
-                  current_incbin := Some real_filename
-                with Not_found ->
-                  ffailwith "Cannot find binary file %s [path = %s]" filename (String.concat ", " path));
+                  current_incbin := Some real_filename);
            String
              (fun symbol ->
                 match !current_incbin with
@@ -159,12 +158,13 @@ let rec mk_spec () =
    "-x",
    String (fun filename ->
        let path = get_path() in
-       try
-         let real_filename = FileExt.find ~path ~ext:[".a"] filename in
+       match FileExt.find ~path ~ext:[".a"] filename with
+       | None ->
+         ffailwith "Cannot find archive file %s [path = %s]" filename (String.concat ", " path)
+       | Some real_filename ->
          Log.message "Archive file %s found: %s" filename real_filename;
-	 files := Extracted_archive real_filename :: !files
-       with Not_found ->
-         ffailwith "Cannot find archive file %s [path = %s]" filename (String.concat ", " path)),
+	 files := Extracted_archive real_filename :: !files),
+
    "<fname> include all objects from archive";
 
    "-y", String (fun s -> lib_directories := s :: !lib_directories), "<dirname> add directory to search path";
