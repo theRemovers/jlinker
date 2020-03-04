@@ -16,9 +16,12 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-val exists: string -> bool
-val has_extension: string -> bool
-val find: ?path:string list -> ?ext:string list -> string -> string option
-val load: string -> string
+val exists : string -> bool
 
-val all_lines: string -> string list
+val has_extension : string -> bool
+
+val find : ?path:string list -> ?ext:string list -> string -> string option
+
+val load : string -> string
+
+val all_lines : string -> string list

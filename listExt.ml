@@ -17,20 +17,12 @@
 *)
 
 let init n f =
-  let rec aux i =
-    if i < n then (f i) :: (aux (i+1))
-    else []
-  in
+  let rec aux i = if i < n then f i :: aux (i + 1) else [] in
   aux 0
 
 let rec choose f = function
   | [] -> []
-  | x :: xs ->
-    begin match f x with
-      | None -> choose f xs
-      | Some y -> y :: (choose f xs)
-    end
+  | x :: xs -> (
+      match f x with None -> choose f xs | Some y -> y :: choose f xs )
 
-let rec concat_map f = function
-  | [] -> []
-  | x :: xs -> f x @ (concat_map f xs)
+let rec concat_map f = function [] -> [] | x :: xs -> f x @ concat_map f xs

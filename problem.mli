@@ -16,8 +16,8 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-type 'a input =
-  | Object of 'a
-  | Archive of 'a Archive.t
+type 'a input = Object of 'a | Archive of 'a Archive.t
 
-val solve: Aout.object_params input array -> Aout.object_params array * (string, int) Hashtbl.t * (string * Int32.t) list
+val solve :
+  Aout.object_params input array ->
+  Aout.object_params array * (string, int) Hashtbl.t * (string * Int32.t) list

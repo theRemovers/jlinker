@@ -39,53 +39,47 @@ type stab_type =
   | RSYM (* register variable *)
   | STSYM (* data-segment variable with internal linkage *)
   | GSYM (* global variable *)
-  | LCSYM (* BSS-segment variable with internal linkage *)
+  | LCSYM
 
-type symbol_type =
-  | Undefined
-  | Type of location * section
-  | Stab of stab_type
+(* BSS-segment variable with internal linkage *)
 
-type symbol =
-  {
-    name: string;
-    typ: symbol_type;
-    other: int;
-    desc: int;
-    value: Int32.t;
-  }
+type symbol_type = Undefined | Type of location * section | Stab of stab_type
+
+type symbol = {
+  name : string;
+  typ : symbol_type;
+  other : int;
+  desc : int;
+  value : Int32.t;
+}
 
 type size = Byte | Word | Long
 
-type reloc_base =
-  | Symbol of int
-  | Section of section
+type reloc_base = Symbol of int | Section of section
 
-type reloc_info =
-  {
-    reloc_address: int;
-    reloc_base: reloc_base;
-    pcrel: bool;
-    size: size;
-    baserel: bool;
-    jmptable: bool;
-    relative: bool;
-    copy: bool;
-  }
+type reloc_info = {
+  reloc_address : int;
+  reloc_base : reloc_base;
+  pcrel : bool;
+  size : size;
+  baserel : bool;
+  jmptable : bool;
+  relative : bool;
+  copy : bool;
+}
 
-type object_params =
-  {
-    filename: string;
-    machine: machine;
-    magic: magic;
-    text: string;
-    data: string;
-    bss_size: int;
-    entry: Int32.t;
-    text_reloc: reloc_info list;
-    data_reloc: reloc_info list;
-    symbols: symbol array;
-  }
+type object_params = {
+  filename : string;
+  machine : machine;
+  magic : magic;
+  text : string;
+  data : string;
+  bss_size : int;
+  entry : Int32.t;
+  text_reloc : reloc_info list;
+  data_reloc : reloc_info list;
+  symbols : symbol array;
+}
 
 let machine_of_int32 = function
   | 0l -> Some M68000
@@ -93,25 +87,18 @@ let machine_of_int32 = function
   | 2l -> Some M68020
   | _ -> None
 
-let int32_of_machine = function
-  | M68000 -> 0l
-  | M68010 -> 1l
-  | M68020 -> 2l
+let int32_of_machine = function M68000 -> 0l | M68010 -> 1l | M68020 -> 2l
 
 let string_of_machine = function
   | M68000 -> "68000"
   | M68010 -> "68010"
   | M68020 -> "68020"
 
-let magic_of_int32 = function
-  | 0o407l -> Some OMAGIC
-  | _ -> None
+let magic_of_int32 = function 0o407l -> Some OMAGIC | _ -> None
 
-let int32_of_magic = function
-  | OMAGIC -> 0o407l
+let int32_of_magic = function OMAGIC -> 0o407l
 
-let string_of_magic = function
-  | OMAGIC -> "OMAGIC"
+let string_of_magic = function OMAGIC -> "OMAGIC"
 
 let symbol_type_of_int32 = function
   | 0l -> Undefined (* local undefined ??? *)
@@ -165,9 +152,7 @@ let int32_of_symbol_type = function
   | Stab LBRAC -> 0xc0l
   | Stab RBRAC -> 0xe0l
 
-let string_of_location = function
-  | Local -> "local"
-  | External -> "external"
+let string_of_location = function Local -> "local" | External -> "external"
 
 let string_of_section = function
   | Absolute -> "absolute"
@@ -193,7 +178,10 @@ let string_of_stab = function
 
 let string_of_symbol_type = function
   | Undefined -> "undefined"
-  | Type (location, section) -> Printf.sprintf "%s %s" (string_of_location location) (string_of_section section)
+  | Type (location, section) ->
+      Printf.sprintf "%s %s"
+        (string_of_location location)
+        (string_of_section section)
   | Stab stab -> string_of_stab stab
 
 let section_of_int32 = function
@@ -219,15 +207,11 @@ let size_of_int = function
   | 2 -> Long
   | _ -> failwith "size_of_int"
 
-let int_of_size = function
-  | Byte -> 0
-  | Word -> 1
-  | Long -> 2
+let int_of_size = function Byte -> 0 | Word -> 1 | Long -> 2
 
 let section_of_type = function
   | Type (_, section) -> section
-  | Undefined
-  | Stab _ -> failwith "section_of_type"
+  | Undefined | Stab _ -> failwith "section_of_type"
 
 let verbosity = Log.really_really_verbose
 
@@ -249,35 +233,27 @@ let read_reloc_info (content, base) offset =
   let jmptable = get_flag 2 in
   let relative = get_flag 1 in
   let copy = get_flag 0 in
-  {
-    reloc_address;
-    reloc_base;
-    pcrel;
-    size;
-    baserel;
-    jmptable;
-    relative;
-    copy;
-  }
+  { reloc_address; reloc_base; pcrel; size; baserel; jmptable; relative; copy }
 
 let read_symbol (symbol_table, base_table) (symbol_names, base_names) offset =
   let offset = base_table + offset in
   let index = Int32.to_int (StringExt.read_long symbol_table offset) in
   let name = StringExt.read_string symbol_names (base_names + index) '\000' in
   Log.message ~verbosity "Symbol name: %s" name;
-  let typ = symbol_type_of_int32 (StringExt.read_byte symbol_table (offset + 4)) in
+  let typ =
+    symbol_type_of_int32 (StringExt.read_byte symbol_table (offset + 4))
+  in
   Log.message ~verbosity "Symbol type: %s" (string_of_symbol_type typ);
   let other = Int32.to_int (StringExt.read_byte symbol_table (offset + 5)) in
   let desc = Int32.to_int (StringExt.read_word symbol_table (offset + 6)) in
   let value = StringExt.read_long symbol_table (offset + 8) in
-  {name; typ; other; desc; value}
+  { name; typ; other; desc; value }
 
 let build_index symbols =
   let tbl = Hashtbl.create (Array.length symbols) in
-  let f i {name; typ; _} =
+  let f i { name; typ; _ } =
     match typ with
-    | Undefined
-    | Type _ -> Hashtbl.replace tbl name i
+    | Undefined | Type _ -> Hashtbl.replace tbl name i
     | Stab _ -> ()
   in
   Array.iteri f symbols;
@@ -287,62 +263,67 @@ let load_object ~filename content =
   Log.message ~verbosity "Loading object %s" filename;
   let mach = StringExt.read_word content 0 in
   let magic = StringExt.read_word content 2 in
-  match machine_of_int32 mach, magic_of_int32 magic with
+  match (machine_of_int32 mach, magic_of_int32 magic) with
   | Some machine, Some magic ->
-    Log.message ~verbosity "Machine: %s" (string_of_machine machine);
-    Log.message ~verbosity "Magic: %s" (string_of_magic magic);
-    let text_size = Int32.to_int (StringExt.read_long content 4) in
-    Log.message ~verbosity "Text size: %d" text_size;
-    let data_size = Int32.to_int (StringExt.read_long content 8) in
-    Log.message ~verbosity "Data size: %d" data_size;
-    let bss_size = Int32.to_int (StringExt.read_long content 12) in
-    Log.message ~verbosity "BSS size: %d" bss_size;
-    let sym_size = Int32.to_int (StringExt.read_long content 16) in
-    Log.message ~verbosity "Symbol size: %d" sym_size;
-    let entry = StringExt.read_long content 20 in
-    Log.message ~verbosity "Entry: 0x%08lx" entry;
-    let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
-    Log.message ~verbosity "Text reloc size: %d" text_reloc_size;
-    let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
-    Log.message ~verbosity "Data reloc size: %d" data_reloc_size;
-    let offset = 32 in
-    let text = StringExt.read_substring content offset text_size in
-    let offset = offset + text_size in
-    let data = StringExt.read_substring content offset data_size in
-    let offset = offset + data_size in
-    let text_reloc = ListExt.init (text_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
-    let offset = offset + text_reloc_size in
-    let data_reloc = ListExt.init (data_reloc_size / 8) (fun i -> read_reloc_info (content, offset) (8 * i)) in
-    let offset = offset + data_reloc_size in
-    let base_tbl = offset in
-    let offset = offset + sym_size in
-    (* let _size = StringExt.read_long content offset in *)
-    (* Log.message ~verbosity "Size: %ld" _size; *)
-    let symbols = Array.init (sym_size / 12) (fun i -> read_symbol (content, base_tbl) (content, offset) (12 * i)) in
-    Some
-      {
-	filename;
-	machine;
-	magic;
-        text;
-        data;
-        bss_size;
-	entry;
-        text_reloc;
-        data_reloc;
-        symbols;
-      }
+      Log.message ~verbosity "Machine: %s" (string_of_machine machine);
+      Log.message ~verbosity "Magic: %s" (string_of_magic magic);
+      let text_size = Int32.to_int (StringExt.read_long content 4) in
+      Log.message ~verbosity "Text size: %d" text_size;
+      let data_size = Int32.to_int (StringExt.read_long content 8) in
+      Log.message ~verbosity "Data size: %d" data_size;
+      let bss_size = Int32.to_int (StringExt.read_long content 12) in
+      Log.message ~verbosity "BSS size: %d" bss_size;
+      let sym_size = Int32.to_int (StringExt.read_long content 16) in
+      Log.message ~verbosity "Symbol size: %d" sym_size;
+      let entry = StringExt.read_long content 20 in
+      Log.message ~verbosity "Entry: 0x%08lx" entry;
+      let text_reloc_size = Int32.to_int (StringExt.read_long content 24) in
+      Log.message ~verbosity "Text reloc size: %d" text_reloc_size;
+      let data_reloc_size = Int32.to_int (StringExt.read_long content 28) in
+      Log.message ~verbosity "Data reloc size: %d" data_reloc_size;
+      let offset = 32 in
+      let text = StringExt.read_substring content offset text_size in
+      let offset = offset + text_size in
+      let data = StringExt.read_substring content offset data_size in
+      let offset = offset + data_size in
+      let text_reloc =
+        ListExt.init (text_reloc_size / 8) (fun i ->
+            read_reloc_info (content, offset) (8 * i))
+      in
+      let offset = offset + text_reloc_size in
+      let data_reloc =
+        ListExt.init (data_reloc_size / 8) (fun i ->
+            read_reloc_info (content, offset) (8 * i))
+      in
+      let offset = offset + data_reloc_size in
+      let base_tbl = offset in
+      let offset = offset + sym_size in
+      (* let _size = StringExt.read_long content offset in *)
+      (* Log.message ~verbosity "Size: %ld" _size; *)
+      let symbols =
+        Array.init (sym_size / 12) (fun i ->
+            read_symbol (content, base_tbl) (content, offset) (12 * i))
+      in
+      Some
+        {
+          filename;
+          machine;
+          magic;
+          text;
+          data;
+          bss_size;
+          entry;
+          text_reloc;
+          data_reloc;
+          symbols;
+        }
   | _ -> None
 
 let data_object ~filename ~symbol data =
   let start_name = "_" ^ symbol in
   let end_name = start_name ^ "x" in
   let mk_symbol name value =
-    { name;
-      typ = Type (External, Data);
-      other = 0;
-      desc = 0;
-      value }
+    { name; typ = Type (External, Data); other = 0; desc = 0; value }
   in
   {
     filename;
@@ -354,49 +335,77 @@ let data_object ~filename ~symbol data =
     entry = 0l;
     text_reloc = [];
     data_reloc = [];
-    symbols = [| mk_symbol start_name 0l; mk_symbol end_name (Int32.of_int (String.length data)) |]
+    symbols =
+      [|
+        mk_symbol start_name 0l;
+        mk_symbol end_name (Int32.of_int (String.length data));
+      |];
   }
 
-let emit_reloc_info oc {reloc_address; reloc_base; pcrel; size; baserel; jmptable; relative; copy} =
+let emit_reloc_info oc
+    {
+      reloc_address;
+      reloc_base;
+      pcrel;
+      size;
+      baserel;
+      jmptable;
+      relative;
+      copy;
+    } =
   let open Emit in
   emit_long oc (Int32.of_int reloc_address);
   let set_flag b n = if b then 1 lsl n else 0 in
   let flags = set_flag pcrel 7 in
-  let flags = flags lor ((int_of_size size) lsl 5) in
-  let flags = flags lor (set_flag baserel 3) in
-  let flags = flags lor (set_flag jmptable 2) in
-  let flags = flags lor (set_flag relative 1) in
-  let flags = flags lor (set_flag copy 0) in
+  let flags = flags lor (int_of_size size lsl 5) in
+  let flags = flags lor set_flag baserel 3 in
+  let flags = flags lor set_flag jmptable 2 in
+  let flags = flags lor set_flag relative 1 in
+  let flags = flags lor set_flag copy 0 in
   let extern, reloc_base =
     match reloc_base with
-    | Section section -> false, int32_of_section section
-    | Symbol no -> true, Int32.of_int no
+    | Section section -> (false, int32_of_section section)
+    | Symbol no -> (true, Int32.of_int no)
   in
-  let flags = flags lor (set_flag extern 4) in
-  let data = Int32.logor (Int32.shift_left reloc_base 8) (Int32.of_int (flags land 0xff)) in
+  let flags = flags lor set_flag extern 4 in
+  let data =
+    Int32.logor (Int32.shift_left reloc_base 8) (Int32.of_int (flags land 0xff))
+  in
   emit_long oc data
 
 let emit_symbols oc symbols =
   let open Emit in
   let n = Array.length symbols in
   let index = ref 4 in
-  for i = 0 to n-1 do
-    let {name; typ; other; desc; value} = symbols.(i) in
+  for i = 0 to n - 1 do
+    let { name; typ; other; desc; value } = symbols.(i) in
     emit_long oc (Int32.of_int !index);
     emit_byte oc (int32_of_symbol_type typ);
     emit_byte oc (Int32.of_int other);
     emit_word oc (Int32.of_int desc);
     emit_long oc value;
-    index := !index + String.length name + 1;
+    index := !index + String.length name + 1
   done;
   emit_long oc (Int32.of_int !index);
-  for i = 0 to n-1 do
-    let {name; _} = symbols.(i) in
+  for i = 0 to n - 1 do
+    let { name; _ } = symbols.(i) in
     output_string oc name;
     output_char oc '\000'
   done
 
-let save_object filename {filename = _; machine; magic; text; data; bss_size; entry; symbols; text_reloc; data_reloc} =
+let save_object filename
+    {
+      filename = _;
+      machine;
+      magic;
+      text;
+      data;
+      bss_size;
+      entry;
+      symbols;
+      text_reloc;
+      data_reloc;
+    } =
   let open Emit in
   let oc = open_out_bin filename in
   emit_word oc (int32_of_machine machine);

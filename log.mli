@@ -18,13 +18,18 @@
 
 type verbosity
 
-val verbose: verbosity
-val really_verbose: verbosity
-val really_really_verbose: verbosity
-val increase_verbosity: unit -> unit
+val verbose : verbosity
 
-val set_warning_enabled: bool -> unit
+val really_verbose : verbosity
 
-val message: ?verbosity:verbosity -> ('a, unit, string, unit) format4 -> 'a
-val warning: ('a, unit, string, unit) format4 -> 'a
-val error:  string -> 'a
+val really_really_verbose : verbosity
+
+val increase_verbosity : unit -> unit
+
+val set_warning_enabled : bool -> unit
+
+val message : ?verbosity:verbosity -> ('a, unit, string, unit) format4 -> 'a
+
+val warning : ('a, unit, string, unit) format4 -> 'a
+
+val error : string -> 'a

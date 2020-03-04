@@ -16,10 +16,16 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-let exists filename = try close_in (open_in_bin filename); true with _ -> false
+let exists filename =
+  try
+    close_in (open_in_bin filename);
+    true
+  with _ -> false
 
 let has_extension filename =
-  try ignore (Filename.chop_extension filename : string); true
+  try
+    ignore (Filename.chop_extension filename : string);
+    true
   with Invalid_argument _ -> false
 
 let find ?(path = []) ?(ext = []) filename =
@@ -30,26 +36,24 @@ let find ?(path = []) ?(ext = []) filename =
       let rec aux = function
         | [] -> None
         | ext :: others ->
-          let filename_ext = filename ^ ext in
-          if exists filename_ext then Some filename_ext
-          else aux others
+            let filename_ext = filename ^ ext in
+            if exists filename_ext then Some filename_ext else aux others
       in
       aux ext
     else None
   in
   match find_aux filename with
   | None ->
-    if Filename.is_implicit filename then
-      let rec aux = function
-        | [] -> None
-        | dir :: others ->
-          begin match find_aux (Filename.concat dir filename) with
-            | None -> aux others
-            | Some filename -> Some filename
-          end
-      in
-      aux path
-    else None
+      if Filename.is_implicit filename then
+        let rec aux = function
+          | [] -> None
+          | dir :: others -> (
+              match find_aux (Filename.concat dir filename) with
+              | None -> aux others
+              | Some filename -> Some filename )
+        in
+        aux path
+      else None
   | Some filename -> Some filename
 
 let load filename =

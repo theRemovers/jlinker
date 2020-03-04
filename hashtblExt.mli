@@ -16,6 +16,6 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-val choose: ('a, 'b) Hashtbl.t -> 'a
+val choose : ('a, 'b) Hashtbl.t -> 'a
 
-val keys: ('a, 'b) Hashtbl.t -> 'a list
+val keys : ('a, 'b) Hashtbl.t -> 'a list

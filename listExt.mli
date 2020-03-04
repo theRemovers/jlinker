@@ -16,8 +16,8 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-val init: int -> (int -> 'a) -> 'a list
+val init : int -> (int -> 'a) -> 'a list
 
-val choose: ('a -> 'b option) -> 'a list -> 'b list
+val choose : ('a -> 'b option) -> 'a list -> 'b list
 
-val concat_map: ('a -> 'b list) -> 'a list -> 'b list
+val concat_map : ('a -> 'b list) -> 'a list -> 'b list

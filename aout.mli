@@ -38,60 +38,54 @@ type stab_type =
   | RSYM (* register variable *)
   | STSYM (* data-segment variable with internal linkage *)
   | GSYM (* global variable *)
-  | LCSYM (* BSS-segment variable with internal linkage *)
+  | LCSYM
 
-type symbol_type =
-  | Undefined
-  | Type of location * section
-  | Stab of stab_type
+(* BSS-segment variable with internal linkage *)
 
-type symbol =
-    {
-      name: string;
-      typ: symbol_type;
-      other: int;
-      desc: int;
-      value: Int32.t;
-    }
+type symbol_type = Undefined | Type of location * section | Stab of stab_type
+
+type symbol = {
+  name : string;
+  typ : symbol_type;
+  other : int;
+  desc : int;
+  value : Int32.t;
+}
 
 type size = Byte | Word | Long
 
-type reloc_base =
-  | Symbol of int
-  | Section of section
+type reloc_base = Symbol of int | Section of section
 
-type reloc_info =
-    {
-      reloc_address: int;
-      reloc_base: reloc_base;
-      pcrel: bool;
-      size: size;
-      baserel: bool;
-      jmptable: bool;
-      relative: bool;
-      copy: bool;
-    }
+type reloc_info = {
+  reloc_address : int;
+  reloc_base : reloc_base;
+  pcrel : bool;
+  size : size;
+  baserel : bool;
+  jmptable : bool;
+  relative : bool;
+  copy : bool;
+}
 
-type object_params =
-    {
-      filename: string;
-      machine: machine;
-      magic: magic;
-      text: string;
-      data: string;
-      bss_size: int;
-      entry: Int32.t;
-      text_reloc: reloc_info list;
-      data_reloc: reloc_info list;
-      symbols: symbol array;
-    }
+type object_params = {
+  filename : string;
+  machine : machine;
+  magic : magic;
+  text : string;
+  data : string;
+  bss_size : int;
+  entry : Int32.t;
+  text_reloc : reloc_info list;
+  data_reloc : reloc_info list;
+  symbols : symbol array;
+}
 
-val section_of_type: symbol_type -> section
+val section_of_type : symbol_type -> section
 
-val build_index: symbol array -> (string, int) Hashtbl.t
+val build_index : symbol array -> (string, int) Hashtbl.t
 
-val load_object: filename:string -> string -> object_params option
+val load_object : filename:string -> string -> object_params option
 
-val data_object: filename:string -> symbol:string -> string -> object_params
+val data_object : filename:string -> symbol:string -> string -> object_params
 
-val save_object: string -> object_params -> unit
+val save_object : string -> object_params -> unit

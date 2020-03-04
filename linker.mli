@@ -16,23 +16,20 @@
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 *)
 
-type padding =
-  | Word
-  | Long
-  | Phrase
-  | DoublePhrase
-  | QuadPhrase
+type padding = Word | Long | Phrase | DoublePhrase | QuadPhrase
 
-type segment_type =
-  | Relocatable
-  | Contiguous
-  | Absolute of Int32.t
+type segment_type = Relocatable | Contiguous | Absolute of Int32.t
 
-type layout =
-    {
-      text_address: Int32.t option;
-      data_address: Int32.t option;
-      bss_address: Int32.t option;
-    }
+type layout = {
+  text_address : Int32.t option;
+  data_address : Int32.t option;
+  bss_address : Int32.t option;
+}
 
-val partial_link: ?layout:segment_type * segment_type * segment_type -> ?extra_symbols: string list -> resolve_common_symbols:bool -> padding -> Aout.object_params array * (string, int) Hashtbl.t * (string * Int32.t) list -> layout * Aout.object_params
+val partial_link :
+  ?layout:segment_type * segment_type * segment_type ->
+  ?extra_symbols:string list ->
+  resolve_common_symbols:bool ->
+  padding ->
+  Aout.object_params array * (string, int) Hashtbl.t * (string * Int32.t) list ->
+  layout * Aout.object_params
