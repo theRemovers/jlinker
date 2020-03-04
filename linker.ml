@@ -96,10 +96,10 @@ let concat padding objects common_symbols =
   let common_tbl =
     let tbl = Hashtbl.create 16 in
     List.iter (fun (sym_name, size) ->
-	let offset = bss_section # offset in
-	let value = Int32.of_int (offset + bss_offset) in
-	Hashtbl.replace tbl sym_name value;
-	bss_section # add_content (Int32.to_int size)) common_symbols;
+        let offset = bss_section # offset in
+        let value = Int32.of_int (offset + bss_offset) in
+        Hashtbl.replace tbl sym_name value;
+        bss_section # add_content (Int32.to_int size)) common_symbols;
     tbl
   in
   let bss_length = bss_section # offset in
@@ -140,10 +140,10 @@ let build_symbol_table find_symbol (index, unresolved_symbols) extra_tbl =
   in
   let externals =
     let f (name, value) =
-      try
-	let section, value = Hashtbl.find extra_tbl name in
-	mk_symbol Aout.(Type (External, section)) (name, value)
-      with Not_found -> mk_symbol Aout.Undefined (name, value)
+      match Hashtbl.find_opt extra_tbl name with
+      | None -> mk_symbol Aout.Undefined (name, value)
+      | Some (section, value) ->
+        mk_symbol Aout.(Type (External, section)) (name, value)
     in
     List.map f unresolved_symbols
   in
@@ -235,11 +235,11 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding (
     let tbl = Hashtbl.create 16 in
     (* first define extra symbols (eg _TEXT_E, _DATA_E, _BSS_E) *)
     let f name =
-      try
-	let (section, value) = Hashtbl.find other_tbl name in
-	let new_section, new_value = adapt_to_layout section value in
-	Hashtbl.replace tbl name (new_section, new_value)
-      with Not_found -> ()
+      match Hashtbl.find_opt other_tbl name with
+      | None -> ()
+      | Some (section, value) ->
+        let new_section, new_value = adapt_to_layout section value in
+        Hashtbl.replace tbl name (new_section, new_value)
     in
     List.iter f extra_symbols;
     (* then common symbols (they may replace extra ones) *)
@@ -278,35 +278,35 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding (
       let update = update ~reloc_address ~copy content in
       match reloc_base with
       | Symbol no ->
-	let {name; typ; _} = symbols.(no) in
-	begin match typ with
-	  | Undefined when Hashtbl.mem index name ->
-	    let typ, value = find_symbol name in
-	    update value;
-	    begin match typ with
-	      | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
-	      | Type (_, Absolute) -> None
-	      | Undefined
-	      | Stab _ -> assert false
-	    end
-	  | Undefined when Hashtbl.mem extra_tbl name ->
-	    assert (not (Hashtbl.mem index name));
-	    let section, value = Hashtbl.find extra_tbl name in
-	    update value;
-	    return_info section {info with reloc_address; reloc_base = Section section}
-	  | Undefined ->
-	    assert (not (Hashtbl.mem index name));
-	    assert (not (Hashtbl.mem extra_tbl name));
-	    let symno = Hashtbl.find new_symbols_index name in
-	    Some {info with reloc_address; reloc_base = Symbol symno}
-	  | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
-	  | Stab _ -> assert false
-	end
+        let {name; typ; _} = symbols.(no) in
+        begin match typ with
+          | Undefined when Hashtbl.mem index name ->
+            let typ, value = find_symbol name in
+            update value;
+            begin match typ with
+              | Type (_, ((Text | Data | Bss) as section)) -> Some {info with reloc_address; reloc_base = Section section}
+              | Type (_, Absolute) -> None
+              | Undefined
+              | Stab _ -> assert false
+            end
+          | Undefined when Hashtbl.mem extra_tbl name ->
+            assert (not (Hashtbl.mem index name));
+            let section, value = Hashtbl.find extra_tbl name in
+            update value;
+            return_info section {info with reloc_address; reloc_base = Section section}
+          | Undefined ->
+            assert (not (Hashtbl.mem index name));
+            assert (not (Hashtbl.mem extra_tbl name));
+            let symno = Hashtbl.find new_symbols_index name in
+            Some {info with reloc_address; reloc_base = Symbol symno}
+          | Type ((External | Local), (Text | Data | Absolute | Bss)) -> assert false
+          | Stab _ -> assert false
+        end
       | Section ((Text | Data | Bss) as section) ->
-	let value = adjust_value i section 0l in
-	let new_section, new_value = adapt_to_layout section value in
-	update new_value;
-	return_info new_section {info with reloc_address; reloc_base = Section new_section}
+        let value = adjust_value i section 0l in
+        let new_section, new_value = adapt_to_layout section value in
+        update new_value;
+        return_info new_section {info with reloc_address; reloc_base = Section new_section}
       | Section Absolute -> assert false
     in
     let text_base, data_base, _bss_base = offsets.(i) in
