@@ -16,6 +16,7 @@ OCAMLFLAGS=-unsafe -bin-annot -warn-error +a -w +a-42-45 -safe-string
 VERSION=0.0.1
 
 SRCMLI=fileExt.mli stringExt.mli listExt.mli hashtblExt.mli bytesExt.mli emit.mli
+SRCMLI=version.mli
 SRCMLI+=log.mli
 SRCMLI+=archive.mli
 SRCMLI+=aout.mli
@@ -61,10 +62,16 @@ $(PROJECT).byte: $(CMO)
 	$(OCAMLC) $(INCL) -o $@ $(BYTELIBS) $^
 
 version.ml: Makefile
-	@echo "let date_of_compile=\""`date`"\";;" > $@
-	@echo "let version=\""$(VERSION)"\";;" >> $@
-	@echo "let build_info=\""`uname -msrn`"\";;" >> $@
-	@echo "let revision=\""`git log -1 --format="%h"`"\";;" >> $@
+	@echo "let date_of_compile=\""`date`"\"" > $@
+	@echo "let version=\""$(VERSION)"\"" >> $@
+	@echo "let build_info=\""`uname -msrn`"\"" >> $@
+	@echo "let revision=\""`git log -1 --format="%h"`"\"" >> $@
+
+version.mli: Makefile
+	@echo "val date_of_compile: string" > $@
+	@echo "val version: string" >> $@
+	@echo "val build_info: string" >> $@
+	@echo "val revision: string" >> $@
 
 dist: $(SRCS) $(EXTRA)
 	mkdir $(PROJECT)
@@ -82,7 +89,7 @@ dist: $(SRCS) $(EXTRA)
 	$(OCAMLOPT) $(INCL) -c $(OCAMLFLAGS) -o $@ $<
 
 clean:
-	rm -f $(CMI) $(CMO) $(CMX) $(SRCML:.ml=.o) $(SRCML:.ml=.annot) $(SRCML:.ml=.cmi) $(SRCML:.ml=.cmt) $(SRCML:.ml=.cmti) version.ml $(PROJECT).byte $(PROJECT).native *~
+	rm -f $(CMI) $(CMO) $(CMX) $(SRCML:.ml=.o) $(SRCML:.ml=.annot) $(SRCML:.ml=.cmi) $(SRCML:.ml=.cmt) $(SRCML:.ml=.cmti) version.ml version.mli $(PROJECT).byte $(PROJECT).native *~
 
 .depend: $(SRCS)
 	$(OCAMLDEP) $(INCL) $(SRCS) > .depend
