@@ -320,7 +320,7 @@ let load_object ~filename content =
   | _ -> None
 
 let data_object ~filename ~symbol data =
-  let start_name = "_" ^ symbol in
+  let start_name = symbol in
   let end_name = start_name ^ "x" in
   let mk_symbol name value =
     { name; typ = Type (External, Data); other = 0; desc = 0; value }
