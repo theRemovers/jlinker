@@ -209,8 +209,11 @@ let load_archive archname content =
   Log.message "Loading archive %s" archname;
   let f ({ Archive.filename; data; _ } as file) =
     match Aout.load_object ~filename data with
-    | None -> ffailwith "unsupported file in archive %s: %S" archname filename
     | Some obj -> { file with Archive.data = obj }
+    | None -> (
+        match Elf.load_object ~filename data with
+        | None -> ffailwith "unsupported file in archive %s: %S" archname filename
+        | Some obj -> { file with Archive.data = obj } )
   in
   match Archive.load_archive archname content with
   | None ->
@@ -222,11 +225,15 @@ let process_file = function
   | Object_or_archive filename -> (
       let content = FileExt.load filename in
       match Aout.load_object ~filename content with
+      | Some obj -> [ Problem.Object obj ]
       | None -> (
-          match load_archive filename content with
-          | None -> ffailwith "Cannot read file %s (unknown type)" filename
-          | Some archive -> [ Problem.Archive archive ] )
-      | Some obj -> [ Problem.Object obj ] )
+          match Elf.load_object ~filename content with
+          | Some obj -> [ Problem.Object obj ]
+          | None -> (
+              match load_archive filename content with
+              | None -> ffailwith "Cannot read file %s (unknown type)" filename
+              | Some archive -> [ Problem.Archive archive ] ) )
+      )
   | Extracted_archive filename -> (
       let content = FileExt.load filename in
       match load_archive filename content with
