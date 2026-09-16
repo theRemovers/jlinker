@@ -55,7 +55,11 @@ CMX=$(SRCML:.ml=.cmx)
 
 all: .depend $(PROJECT).native $(PROJECT).byte
 
-.PHONY: all clean dist
+.PHONY: all clean dist test
+
+test: all
+	python3 tests/test_elf.py ./$(PROJECT).native
+	python3 tests/test_elf.py ./$(PROJECT).byte
 
 $(PROJECT).native: $(CMX)
 	$(OCAMLOPT) $(INCL) -o $@ $(NATIVELIBS) $^
@@ -78,6 +82,8 @@ version.mli: Makefile
 dist: $(SRCS) $(EXTRA)
 	mkdir $(PROJECT)
 	cp $(SRCS) $(EXTRA) $(PROJECT)
+	mkdir $(PROJECT)/tests
+	cp tests/test_elf.py $(PROJECT)/tests/
 	tar cfvz $(PROJECT)-$(VERSION).tar.gz $(PROJECT)
 	rm -rf $(PROJECT)
 

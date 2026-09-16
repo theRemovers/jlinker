@@ -76,6 +76,11 @@ let int32_of_int_exn n =
   try Int32.of_int n
   with _ -> ffailwith "integer overflow: %d" n
 
+let check_alignment n =
+  if n < 0 || (n > 0 && n land (n - 1) <> 0) then
+    ffailwith "invalid ELF alignment %d" n;
+  max 1 n
+
 let align offset n =
   if n <= 1 then offset else ((offset + n) - 1) land lnot (n - 1)
 
@@ -147,21 +152,22 @@ let extract_sections content sections names =
       | None -> ()
       | Some kind -> (
           let size = section.sh_size in
+          let alignment = check_alignment section.sh_addralign in
           match kind with
           | Text ->
-              let base = align (Buffer.length text) section.sh_addralign in
+              let base = align (Buffer.length text) alignment in
               Buffer.add_string text (String.make (base - Buffer.length text) '\000');
               Buffer.add_string text
                 (StringExt.read_substring content section.sh_offset size);
               mapping.(i) <- Some { kind; base }
           | Data ->
-              let base = align (Buffer.length data) section.sh_addralign in
+              let base = align (Buffer.length data) alignment in
               Buffer.add_string data (String.make (base - Buffer.length data) '\000');
               Buffer.add_string data
                 (StringExt.read_substring content section.sh_offset size);
               mapping.(i) <- Some { kind; base }
           | Bss ->
-              let base = align !bss_size section.sh_addralign in
+              let base = align !bss_size alignment in
               bss_size := base + size;
               mapping.(i) <- Some { kind; base }))
     sections;
@@ -219,14 +225,6 @@ let relocation_symbol symbols index =
   if index < 0 || index >= Array.length symbols then
     ffailwith "invalid ELF relocation symbol index %d" index
   else symbols.(index)
-
-let relocation_target mapping shndx name =
-  if shndx < 0 || shndx >= Array.length mapping then
-    ffailwith "invalid relocation section index %d" shndx
-  else
-  match mapping.(shndx) with
-  | None -> ffailwith "relocation against unsupported section %S" name
-  | Some mapped -> mapped
 
 let section_bytes kind text data =
   match kind with
@@ -311,8 +309,8 @@ let convert_reloc mapping elf_symbols symbol_indices text data target_name targe
     (fun (offset, sym_index, rtype, addend) -> convert_one offset sym_index rtype addend)
     relocs
 
-let collect_relocations endian content sections names mapping elf_symbols symbol_indices
-    text data =
+let collect_relocations endian content sections names mapping symbol_mapping
+    elf_symbols symbol_indices text data =
   let text_reloc = ref [] in
   let data_reloc = ref [] in
   Array.iteri
@@ -322,37 +320,43 @@ let collect_relocations endian content sections names mapping elf_symbols symbol
           let target_index = section.sh_info in
           if target_index <= 0 || target_index >= Array.length sections then
             ffailwith "invalid ELF relocation target section %d" target_index;
-          let target = relocation_target mapping target_index names.(target_index) in
-          let entry_size =
-            match section.sh_type with 9l -> 8 | 4l -> 12 | _ -> assert false
-          in
-          if section.sh_entsize <> 0 && section.sh_entsize <> entry_size then
-            ffailwith "unsupported ELF relocation entry size %d" section.sh_entsize;
-          let n = section.sh_size / entry_size in
-          let relocs =
-            ListExt.init n (fun j ->
-                let offset = section.sh_offset + (j * entry_size) in
-                let r_offset = Int32.to_int (read_u32 endian content offset) in
-                let r_info = read_u32 endian content (offset + 4) in
-                let sym_index = Int32.to_int (Int32.shift_right_logical r_info 8) in
-                let rtype = Int32.to_int (Int32.logand r_info 0xffl) in
-                let addend =
-                  match section.sh_type with
-                  | 4l -> Some (read_u32 endian content (offset + 8))
-                  | 9l -> None
-                  | _ -> assert false
-                in
-                (r_offset, sym_index, rtype, addend))
-          in
-          let converted =
-            convert_reloc mapping elf_symbols symbol_indices text data
-              names.(target_index) target relocs
-          in
+          (* Non-allocated sections (notably DWARF) are discarded together
+             with their relocations. Keep validating the target index above. *)
           begin
-            match target.kind with
-            | Text -> text_reloc := converted @ !text_reloc
-            | Data -> data_reloc := converted @ !data_reloc
-            | Bss -> ffailwith "unsupported relocation target section %S" names.(i)
+            match mapping.(target_index) with
+            | None -> ()
+            | Some target ->
+                let entry_size =
+                  match section.sh_type with 9l -> 8 | 4l -> 12 | _ -> assert false
+                in
+                if section.sh_entsize <> 0 && section.sh_entsize <> entry_size then
+                  ffailwith "unsupported ELF relocation entry size %d" section.sh_entsize;
+                let n = section.sh_size / entry_size in
+                let relocs =
+                  ListExt.init n (fun j ->
+                      let offset = section.sh_offset + (j * entry_size) in
+                      let r_offset = Int32.to_int (read_u32 endian content offset) in
+                      let r_info = read_u32 endian content (offset + 4) in
+                      let sym_index = Int32.to_int (Int32.shift_right_logical r_info 8) in
+                      let rtype = Int32.to_int (Int32.logand r_info 0xffl) in
+                      let addend =
+                        match section.sh_type with
+                        | 4l -> Some (read_u32 endian content (offset + 8))
+                        | 9l -> None
+                        | _ -> assert false
+                      in
+                      (r_offset, sym_index, rtype, addend))
+                in
+                let converted =
+                  convert_reloc symbol_mapping elf_symbols symbol_indices text data
+                    names.(target_index) target relocs
+                in
+                begin
+                  match target.kind with
+                  | Text -> text_reloc := converted @ !text_reloc
+                  | Data -> data_reloc := converted @ !data_reloc
+                  | Bss -> ffailwith "unsupported relocation target section %S" names.(i)
+                end
           end
       | _ -> ())
     sections;
@@ -420,10 +424,45 @@ let load_object ~filename content =
             in
             load_symbol_table endian content strtab symtab
       in
-      let symbols, symbol_indices = build_symbols mapping elf_symbols in
+      let section_alignments =
+        Array.fold_left
+          (fun (ta, da, ba) (section, mapped) ->
+            match mapped with
+            | None -> (ta, da, ba)
+            | Some { kind; _ } ->
+                let a = check_alignment section.sh_addralign in
+                match kind with
+                | Text -> (max ta a, da, ba)
+                | Data -> (ta, max da a, ba)
+                | Bss -> (ta, da, max ba a))
+          (1, 1, 1) (Array.mapi (fun i section -> (section, mapping.(i))) sections)
+      in
+      let common_alignments =
+        Array.fold_right
+          (fun sym acc ->
+            if sym.shndx = 0xfff2 then
+              (sym.name, check_alignment (Int32.to_int sym.value)) :: acc
+            else acc)
+          elf_symbols []
+      in
+      (* a.out values include the preceding segments, unlike ELF values.
+         Relocation locations still use the original section-relative mapping. *)
+      let symbol_mapping =
+        Array.map
+          (Option.map (fun { kind; base } ->
+               let prefix =
+                 match kind with
+                 | Text -> 0
+                 | Data -> Bytes.length text
+                 | Bss -> Bytes.length text + Bytes.length data
+               in
+               { kind; base = base + prefix }))
+          mapping
+      in
+      let symbols, symbol_indices = build_symbols symbol_mapping elf_symbols in
       let text_reloc, data_reloc =
-        collect_relocations endian content sections names mapping elf_symbols
-          symbol_indices text data
+        collect_relocations endian content sections names mapping symbol_mapping
+          elf_symbols symbol_indices text data
       in
       Some
         {
@@ -434,6 +473,8 @@ let load_object ~filename content =
           data = Bytes.to_string data;
           bss_size;
           entry = 0l;
+          section_alignments;
+          common_alignments;
           text_reloc;
           data_reloc;
           symbols;

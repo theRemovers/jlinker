@@ -75,6 +75,11 @@ type object_params = {
   data : string;
   bss_size : int;
   entry : Int32.t;
+  (* Minimum alignments for text, data and bss bases; 1 means unconstrained.
+     These requirements are internal metadata, not representable in a.out. *)
+  section_alignments : int * int * int;
+  (* Alignment requirements of ELF SHN_COMMON symbols. *)
+  common_alignments : (string * int) list;
   text_reloc : reloc_info list;
   data_reloc : reloc_info list;
   symbols : symbol array;

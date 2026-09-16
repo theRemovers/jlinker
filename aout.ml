@@ -76,6 +76,8 @@ type object_params = {
   data : string;
   bss_size : int;
   entry : Int32.t;
+  section_alignments : int * int * int;
+  common_alignments : (string * int) list;
   text_reloc : reloc_info list;
   data_reloc : reloc_info list;
   symbols : symbol array;
@@ -313,6 +315,8 @@ let load_object ~filename content =
           data;
           bss_size;
           entry;
+          section_alignments = (1, 1, 1);
+          common_alignments = [];
           text_reloc;
           data_reloc;
           symbols;
@@ -333,6 +337,8 @@ let data_object ~filename ~symbol data =
     data;
     bss_size = 0;
     entry = 0l;
+    section_alignments = (1, 1, 1);
+    common_alignments = [];
     text_reloc = [];
     data_reloc = [];
     symbols =
@@ -402,11 +408,17 @@ let save_object filename
       data;
       bss_size;
       entry;
+      section_alignments;
+      common_alignments;
       symbols;
       text_reloc;
       data_reloc;
     } =
   let open Emit in
+  if section_alignments <> (1, 1, 1)
+     || List.exists (fun (_, alignment) -> alignment > 1) common_alignments then
+    failwith
+      "a.out output cannot preserve ELF alignment requirements; use an absolute link";
   let oc = open_out_bin filename in
   emit_word oc (int32_of_machine machine);
   emit_word oc (int32_of_magic magic);

@@ -35,24 +35,29 @@ let pad padding offset =
   | DoublePhrase -> f 15
   | QuadPhrase -> f 31
 
+let align alignment offset =
+  (offset + alignment - 1) land lnot (alignment - 1)
+
 class section padding =
   object (this)
     val mutable offset = 0
 
     val buf = Buffer.create 1024
 
-    method private pad =
-      let n = pad padding offset - offset in
+    method align alignment =
+      let n = align alignment offset - offset in
       for _i = 0 to n - 1 do
         Buffer.add_char buf '\000'
       done;
       offset <- offset + n
 
-    method add_content data =
-      let n = String.length data in
+    method append data =
       Buffer.add_string buf data;
-      offset <- offset + n;
-      this#pad
+      offset <- offset + String.length data
+
+    method add_content data =
+      this#append data;
+      this#align (pad padding 1)
 
     method offset = offset
 
@@ -62,6 +67,8 @@ class section padding =
 class virtual_section padding =
   object
     val mutable offset = 0
+
+    method align alignment = offset <- align alignment offset
 
     method add_content n = offset <- pad padding (offset + n)
 
@@ -74,14 +81,20 @@ let swap_words v =
   let high = shift_right_logical v 16 in
   logor (shift_left low 16) high
 
-let concat padding objects common_symbols =
+let concat layout section_alignments common_alignments padding objects
+    common_symbols =
   let n = Array.length objects in
   let text_section = new section padding in
   let data_section = new section padding in
   let bss_section = new virtual_section padding in
   let offsets = Array.map (fun _ -> (0l, 0l, 0l)) objects in
   for i = 0 to n - 1 do
-    let { Aout.text; data; bss_size; _ } = objects.(i) in
+    let { Aout.text; data; bss_size; section_alignments = (ta, da, ba); _ } =
+      objects.(i)
+    in
+    text_section#align ta;
+    data_section#align da;
+    bss_section#align ba;
     offsets.(i) <-
       ( Int32.of_int text_section#offset,
         Int32.of_int data_section#offset,
@@ -90,13 +103,55 @@ let concat padding objects common_symbols =
     data_section#add_content data;
     bss_section#add_content bss_size
   done;
+  (* Keep contiguous segments contiguous in the file as well as in memory:
+     alignment gaps belong to the end of the preceding segment. *)
+  let _, data_alignment, bss_alignment = section_alignments in
+  let text_base, data_info, bss_info =
+    match layout with
+    | None -> (0l, Relocatable, Relocatable)
+    | Some (text_info, data_info, bss_info) ->
+        let base =
+          match text_info with
+          | Absolute addr -> addr
+          | Relocatable | Contiguous -> 0l
+        in
+        (base, data_info, bss_info)
+  in
+  let pad_end segment base alignment =
+    let address = Int32.add base (Int32.of_int segment#offset) in
+    let remainder =
+      Int32.to_int (Int32.logand address (Int32.of_int (alignment - 1)))
+    in
+    if remainder <> 0 then
+      segment#append (String.make (alignment - remainder) '\000')
+  in
+  begin
+    match data_info with
+    | Contiguous -> pad_end text_section text_base data_alignment
+    | Relocatable | Absolute _ -> ()
+  end;
   let text_length = text_section#offset in
+  let data_base =
+    match data_info with
+    | Absolute addr -> addr
+    | Contiguous -> Int32.add text_base (Int32.of_int text_length)
+    | Relocatable -> 0l
+  in
+  begin
+    match bss_info with
+    | Contiguous -> pad_end data_section data_base bss_alignment
+    | Relocatable | Absolute _ -> ()
+  end;
   let data_length = data_section#offset in
   let bss_offset = text_length + data_length in
   let common_tbl =
     let tbl = Hashtbl.create 16 in
     List.iter
       (fun (sym_name, size) ->
+        let alignment =
+          Option.value ~default:1 (List.assoc_opt sym_name common_alignments)
+        in
+        bss_section#align alignment;
         let offset = bss_section#offset in
         let value = Int32.of_int (offset + bss_offset) in
         Hashtbl.replace tbl sym_name value;
@@ -228,8 +283,47 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding
       List.filter is_common unresolved_symbols
     else []
   in
+  let common_alignments =
+    let table = Hashtbl.create 16 in
+    Array.iter
+      (fun obj ->
+        List.iter
+          (fun (name, alignment) ->
+            let previous =
+              Option.value ~default:1 (Hashtbl.find_opt table name)
+            in
+            Hashtbl.replace table name (max previous alignment))
+          obj.Aout.common_alignments)
+      objects;
+    List.filter_map
+      (fun (name, _) ->
+        Option.map (fun alignment -> (name, alignment))
+          (Hashtbl.find_opt table name))
+      unresolved_symbols
+  in
+  let section_alignments =
+    let ta, da, ba =
+      Array.fold_left
+        (fun (ta, da, ba) obj ->
+          let t, d, b = obj.Aout.section_alignments in
+          (max ta t, max da d, max ba b))
+        (1, 1, 1) objects
+    in
+    let ba =
+      if resolve_common_symbols then
+        List.fold_left (fun a (_, b) -> max a b) ba common_alignments
+      else ba
+    in
+    (ta, da, ba)
+  in
+  let check_address name alignment = function
+    | Some address when Int32.logand address (Int32.of_int (alignment - 1)) <> 0l ->
+        Printf.ksprintf failwith
+          "%s address 0x%lx does not satisfy ELF alignment %d" name address alignment
+    | None | Some _ -> ()
+  in
   let offsets, text, data, bss_size, common_tbl, other_tbl =
-    concat padding objects common_symbols
+    concat layout section_alignments common_alignments padding objects common_symbols
   in
   let lookup = find_object_and_symbol (index, objects) in
   let textlen = Bytes.length text and datalen = Bytes.length data in
@@ -238,6 +332,10 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding
     | None -> { text_address = None; data_address = None; bss_address = None }
     | Some params -> get_layout params ~textlen ~datalen
   in
+  let ta, da, ba = section_alignments in
+  check_address "text" ta layout.text_address;
+  check_address "data" da layout.data_address;
+  check_address "bss" ba layout.bss_address;
   let adapt_to_layout section value =
     let open Aout in
     match (section, layout) with
@@ -357,6 +455,11 @@ let partial_link ?layout ?(extra_symbols = []) ~resolve_common_symbols padding
       data = Bytes.to_string data;
       bss_size;
       entry = 0l;
+      section_alignments =
+        ( (if layout.text_address = None then ta else 1),
+          (if layout.data_address = None then da else 1),
+          (if layout.bss_address = None then ba else 1) );
+      common_alignments = if resolve_common_symbols then [] else common_alignments;
       text_reloc;
       data_reloc;
       symbols = new_symbols;
